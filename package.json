@@ -9,6 +9,7 @@
     "download:mineru-models": "cd apps/api && .venv/bin/python scripts/download_mineru_local_models.py --base ./data/mineru-models",
     "reindex": "cd apps/api && .venv/bin/python scripts/reindex_library.py",
     "reindex:all": "cd apps/api && .venv/bin/python scripts/reindex_library.py --all",
+    "reindex:unindexed": "cd apps/api && .venv/bin/python scripts/reindex_library.py --all --unindexed-only",
     "setup:web": "npm --prefix apps/web install",
     "dev": "concurrently -k -n mineru,api,web -c blue,cyan,magenta \"npm run dev:mineru-api\" \"npm run dev:api\" \"npm run dev:web\"",
     "dev:mineru-api": "bash scripts/dev-mineru-api.sh",
@@ -19,7 +20,9 @@
     "build:web": "npm --prefix apps/web run build",
     "lint:web": "npm --prefix apps/web run lint",
     "test": "npm run test:api",
-    "test:api": "cd apps/api && .venv/bin/pytest -q"
+    "test:api": "cd apps/api && .venv/bin/pytest -q -m 'not optional'",
+    "test:api:all": "cd apps/api && .venv/bin/pytest -q -m ''",
+    "test:api:optional": "cd apps/api && .venv/bin/pytest -q -m optional"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

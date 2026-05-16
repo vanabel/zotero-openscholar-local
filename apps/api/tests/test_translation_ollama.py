@@ -19,6 +19,8 @@ def test_hunyuan_zh_to_en_prompt_matches_official_wrap():
     assert "你好世界" in out
 
 
+@pytest.mark.optional
+@pytest.mark.ollama
 def test_ollama_api_chat_hy_mt_zh_to_en_hello_world():
     """
     等价于 CLI：

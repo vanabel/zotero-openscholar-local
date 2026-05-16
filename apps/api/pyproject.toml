@@ -20,7 +20,7 @@ openscholar = [
   "sentencepiece>=0.2.0",
   "protobuf>=4.0",
 ]
-dev = ["ruff>=0.6.0", "pytest>=8.3.0"]
+dev = ["ruff>=0.6.0", "pytest>=8.3.0", "python-docx>=1.1.0"]
 # 仅用于 scripts/download_mineru_local_models.py；装在本仓库 venv 内，勿污染系统 Python
 hf = [
   "huggingface_hub>=0.23.0",
@@ -34,3 +34,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["app*"]
+
+[tool.pytest.ini_options]
+markers = [
+  "optional: 需要本机 Ollama / MinerU 等外部服务（CI 默认跳过）",
+  "ollama: 需要 Ollama",
+  "mineru: 需要 MinerU",
+]
