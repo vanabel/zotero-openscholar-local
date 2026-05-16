@@ -1,0 +1,159 @@
+[
+    [
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "Multi-point maximum principles and eigenvalue estimates "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                221,
+                108,
+                779,
+                151
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Ben Andrews "
+                    }
+                ]
+            },
+            "bbox": [
+                221,
+                178,
+                319,
+                191
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Abstract Estimates on modulus of continuity, isoperimetric profiles of various kinds, and quantities involving function values at several points have been central in several recent results in geometric analysis. In these lectures I will focus mostly on the applications to partial differential equations, and to estimates on eigenvalues. These lectures were presented at the MATRIX program on “Recent trends on Nonlinear PDE of Elliptic and Parabolic type” at Creswick, November 5-16, 2018. "
+                    }
+                ]
+            },
+            "bbox": [
+                220,
+                321,
+                784,
+                407
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Acknowledgements This survey describes work supported by Discovery Projects grants DP0985802, DP120102462, and DP120100097, and Laureate Fellowship FL150100126 of the Australian Research Council. "
+                    }
+                ]
+            },
+            "bbox": [
+                220,
+                425,
+                737,
+                462
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "Introductory comments "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                221,
+                499,
+                420,
+                514
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "In this article I want to describe some techniques which have been applied with some success recently to a variety of problems, ranging from my proof with Julie Clutterbuck of the sharp lower bound on the fundamental gap for Schrodinger operators ¨ [4] to Brendle’s proof of the Lawson conjecture [14] and my proof with Haizhong Li of the Pinkall-Sterling conjecture [7]. I will discuss several other interesting applications below. The common thread in these techniques is the application of the maximum principle to functions involving several points or to functions depending on the global structure of solutions. Further related ideas, and more details on some of the methods presented here, can be found in the author’s survey article [1]. "
+                    }
+                ]
+            },
+            "bbox": [
+                220,
+                533,
+                784,
+                661
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Ben Andrews "
+                    }
+                ]
+            },
+            "bbox": [
+                220,
+                671,
+                304,
+                683
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Mathematical Sciences Institute, Australia National University, e-mail: Ben.Andrews@anu.edu.au "
+                    }
+                ]
+            },
+            "bbox": [
+                220,
+                683,
+                784,
+                696
+            ]
+        },
+        {
+            "type": "page_number",
+            "content": {
+                "page_number_content": [
+                    {
+                        "type": "text",
+                        "content": "1 "
+                    }
+                ]
+            },
+            "bbox": [
+                774,
+                783,
+                783,
+                791
+            ]
+        }
+    ]
+]

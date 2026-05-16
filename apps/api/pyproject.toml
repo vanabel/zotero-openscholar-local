@@ -1,0 +1,36 @@
+[project]
+name = "zotero-openscholar-api"
+version = "0.1.0"
+description = "Local Zotero PDF RAG API: OpenScholar-style citation-grounded prompts; not official OpenScholar service or checkpoints."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "httpx>=0.27.0",
+  "pydantic-settings>=2.4.0",
+  "pypdf>=5.0.0",
+  "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+openscholar = [
+  "torch>=2.0",
+  "transformers>=4.40",
+  "sentencepiece>=0.2.0",
+  "protobuf>=4.0",
+]
+dev = ["ruff>=0.6.0", "pytest>=8.3.0"]
+# 仅用于 scripts/download_mineru_local_models.py；装在本仓库 venv 内，勿污染系统 Python
+hf = [
+  "huggingface_hub>=0.23.0",
+  "httpx[socks]>=0.27.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

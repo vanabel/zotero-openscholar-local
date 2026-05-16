@@ -1,0 +1,1283 @@
+{
+    "pdf_info": [
+        {
+            "preproc_blocks": [
+                {
+                    "bbox": [
+                        132,
+                        91,
+                        464,
+                        127
+                    ],
+                    "type": "title",
+                    "angle": 0,
+                    "index": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                132,
+                                91,
+                                464,
+                                111
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        91,
+                                        464,
+                                        111
+                                    ],
+                                    "type": "text",
+                                    "content": "Multi-point maximum principles and eigenvalue",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                111,
+                                199,
+                                128
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        111,
+                                        199,
+                                        128
+                                    ],
+                                    "type": "text",
+                                    "content": "estimates",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "bbox": [
+                        132,
+                        150,
+                        190,
+                        161
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 1,
+                    "lines": [
+                        {
+                            "bbox": [
+                                132,
+                                148,
+                                190,
+                                162
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        148,
+                                        190,
+                                        162
+                                    ],
+                                    "type": "text",
+                                    "content": "Ben Andrews",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        131,
+                        270,
+                        467,
+                        343
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 2,
+                    "lines": [
+                        {
+                            "bbox": [
+                                132,
+                                270,
+                                467,
+                                284
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        270,
+                                        467,
+                                        284
+                                    ],
+                                    "type": "text",
+                                    "content": "Abstract Estimates on modulus of continuity, isoperimetric profiles of various",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                282,
+                                468,
+                                295
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        282,
+                                        468,
+                                        295
+                                    ],
+                                    "type": "text",
+                                    "content": "kinds, and quantities involving function values at several points have been central",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                295,
+                                467,
+                                307
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        295,
+                                        467,
+                                        307
+                                    ],
+                                    "type": "text",
+                                    "content": "in several recent results in geometric analysis. In these lectures I will focus mostly",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                307,
+                                467,
+                                319
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        307,
+                                        467,
+                                        319
+                                    ],
+                                    "type": "text",
+                                    "content": "on the applications to partial differential equations, and to estimates on eigenval-",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                133,
+                                320,
+                                467,
+                                331
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        320,
+                                        467,
+                                        331
+                                    ],
+                                    "type": "text",
+                                    "content": "ues. These lectures were presented at the MATRIX program on “Recent trends on",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                330,
+                                465,
+                                343
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        330,
+                                        465,
+                                        343
+                                    ],
+                                    "type": "text",
+                                    "content": "Nonlinear PDE of Elliptic and Parabolic type” at Creswick, November 5-16, 2018.",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        131,
+                        358,
+                        439,
+                        389
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 3,
+                    "lines": [
+                        {
+                            "bbox": [
+                                133,
+                                358,
+                                437,
+                                370
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        358,
+                                        437,
+                                        370
+                                    ],
+                                    "type": "text",
+                                    "content": "Acknowledgements This survey describes work supported by Discovery Projects grants",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                133,
+                                369,
+                                434,
+                                379
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        369,
+                                        434,
+                                        379
+                                    ],
+                                    "type": "text",
+                                    "content": "DP0985802, DP120102462, and DP120100097, and Laureate Fellowship FL150100126",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                133,
+                                379,
+                                257,
+                                389
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        379,
+                                        257,
+                                        389
+                                    ],
+                                    "type": "text",
+                                    "content": "of the Australian Research Council.",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        132,
+                        420,
+                        250,
+                        433
+                    ],
+                    "type": "title",
+                    "angle": 0,
+                    "index": 4,
+                    "lines": [
+                        {
+                            "bbox": [
+                                133,
+                                419,
+                                250,
+                                433
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        419,
+                                        250,
+                                        433
+                                    ],
+                                    "type": "text",
+                                    "content": "Introductory comments",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "bbox": [
+                        131,
+                        449,
+                        467,
+                        556
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 5,
+                    "lines": [
+                        {
+                            "bbox": [
+                                132,
+                                449,
+                                467,
+                                462
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        449,
+                                        467,
+                                        462
+                                    ],
+                                    "type": "text",
+                                    "content": "In this article I want to describe some techniques which have been applied with some",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                461,
+                                467,
+                                474
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        461,
+                                        467,
+                                        474
+                                    ],
+                                    "type": "text",
+                                    "content": "success recently to a variety of problems, ranging from my proof with Julie Clut-",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                473,
+                                467,
+                                486
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        473,
+                                        467,
+                                        486
+                                    ],
+                                    "type": "text",
+                                    "content": "terbuck of the sharp lower bound on the fundamental gap for Schrodinger operators ¨",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                484,
+                                467,
+                                498
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        484,
+                                        467,
+                                        498
+                                    ],
+                                    "type": "text",
+                                    "content": "[4] to Brendle’s proof of the Lawson conjecture [14] and my proof with Haizhong",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                496,
+                                467,
+                                511
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        496,
+                                        467,
+                                        511
+                                    ],
+                                    "type": "text",
+                                    "content": "Li of the Pinkall-Sterling conjecture [7]. I will discuss several other interesting ap-",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                509,
+                                467,
+                                521
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        509,
+                                        467,
+                                        521
+                                    ],
+                                    "type": "text",
+                                    "content": "plications below. The common thread in these techniques is the application of the",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                520,
+                                468,
+                                534
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        520,
+                                        468,
+                                        534
+                                    ],
+                                    "type": "text",
+                                    "content": "maximum principle to functions involving several points or to functions depending",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                533,
+                                468,
+                                545
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        533,
+                                        468,
+                                        545
+                                    ],
+                                    "type": "text",
+                                    "content": "on the global structure of solutions. Further related ideas, and more details on some",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                544,
+                                443,
+                                557
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        544,
+                                        443,
+                                        557
+                                    ],
+                                    "type": "text",
+                                    "content": "of the methods presented here, can be found in the author’s survey article [1].",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        131,
+                        565,
+                        181,
+                        575
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 6,
+                    "lines": [
+                        {
+                            "bbox": [
+                                133,
+                                565,
+                                182,
+                                576
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        565,
+                                        182,
+                                        576
+                                    ],
+                                    "type": "text",
+                                    "content": "Ben Andrews",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        131,
+                        575,
+                        467,
+                        586
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 7,
+                    "lines": [
+                        {
+                            "bbox": [
+                                132,
+                                575,
+                                467,
+                                587
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        575,
+                                        467,
+                                        587
+                                    ],
+                                    "type": "text",
+                                    "content": "Mathematical Sciences Institute, Australia National University, e-mail: Ben.Andrews@anu.edu.au",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                }
+            ],
+            "discarded_blocks": [
+                {
+                    "bbox": [
+                        461,
+                        659,
+                        466,
+                        666
+                    ],
+                    "type": "page_number",
+                    "angle": 0,
+                    "index": 8,
+                    "lines": [
+                        {
+                            "bbox": [
+                                460,
+                                659,
+                                467,
+                                668
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        460,
+                                        659,
+                                        467,
+                                        668
+                                    ],
+                                    "type": "text",
+                                    "content": "1",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "page_size": [
+                595,
+                841
+            ],
+            "page_idx": 0,
+            "para_blocks": [
+                {
+                    "bbox": [
+                        132,
+                        91,
+                        464,
+                        127
+                    ],
+                    "type": "title",
+                    "angle": 0,
+                    "index": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                132,
+                                91,
+                                464,
+                                111
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        91,
+                                        464,
+                                        111
+                                    ],
+                                    "type": "text",
+                                    "content": "Multi-point maximum principles and eigenvalue",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                111,
+                                199,
+                                128
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        111,
+                                        199,
+                                        128
+                                    ],
+                                    "type": "text",
+                                    "content": "estimates",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "bbox": [
+                        132,
+                        150,
+                        190,
+                        161
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 1,
+                    "lines": [
+                        {
+                            "bbox": [
+                                132,
+                                148,
+                                190,
+                                162
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        148,
+                                        190,
+                                        162
+                                    ],
+                                    "type": "text",
+                                    "content": "Ben Andrews",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        131,
+                        270,
+                        467,
+                        343
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 2,
+                    "lines": [
+                        {
+                            "bbox": [
+                                132,
+                                270,
+                                467,
+                                284
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        270,
+                                        467,
+                                        284
+                                    ],
+                                    "type": "text",
+                                    "content": "Abstract Estimates on modulus of continuity, isoperimetric profiles of various",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                282,
+                                468,
+                                295
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        282,
+                                        468,
+                                        295
+                                    ],
+                                    "type": "text",
+                                    "content": "kinds, and quantities involving function values at several points have been central",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                295,
+                                467,
+                                307
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        295,
+                                        467,
+                                        307
+                                    ],
+                                    "type": "text",
+                                    "content": "in several recent results in geometric analysis. In these lectures I will focus mostly",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                307,
+                                467,
+                                319
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        307,
+                                        467,
+                                        319
+                                    ],
+                                    "type": "text",
+                                    "content": "on the applications to partial differential equations, and to estimates on eigenval-",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                133,
+                                320,
+                                467,
+                                331
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        320,
+                                        467,
+                                        331
+                                    ],
+                                    "type": "text",
+                                    "content": "ues. These lectures were presented at the MATRIX program on “Recent trends on",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                330,
+                                465,
+                                343
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        330,
+                                        465,
+                                        343
+                                    ],
+                                    "type": "text",
+                                    "content": "Nonlinear PDE of Elliptic and Parabolic type” at Creswick, November 5-16, 2018.",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        131,
+                        358,
+                        439,
+                        389
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 3,
+                    "lines": [
+                        {
+                            "bbox": [
+                                133,
+                                358,
+                                437,
+                                370
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        358,
+                                        437,
+                                        370
+                                    ],
+                                    "type": "text",
+                                    "content": "Acknowledgements This survey describes work supported by Discovery Projects grants",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                133,
+                                369,
+                                434,
+                                379
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        369,
+                                        434,
+                                        379
+                                    ],
+                                    "type": "text",
+                                    "content": "DP0985802, DP120102462, and DP120100097, and Laureate Fellowship FL150100126",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                133,
+                                379,
+                                257,
+                                389
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        379,
+                                        257,
+                                        389
+                                    ],
+                                    "type": "text",
+                                    "content": "of the Australian Research Council.",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        132,
+                        420,
+                        250,
+                        433
+                    ],
+                    "type": "title",
+                    "angle": 0,
+                    "index": 4,
+                    "lines": [
+                        {
+                            "bbox": [
+                                133,
+                                419,
+                                250,
+                                433
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        419,
+                                        250,
+                                        433
+                                    ],
+                                    "type": "text",
+                                    "content": "Introductory comments",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "bbox": [
+                        131,
+                        449,
+                        467,
+                        556
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 5,
+                    "lines": [
+                        {
+                            "bbox": [
+                                132,
+                                449,
+                                467,
+                                462
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        449,
+                                        467,
+                                        462
+                                    ],
+                                    "type": "text",
+                                    "content": "In this article I want to describe some techniques which have been applied with some",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                461,
+                                467,
+                                474
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        461,
+                                        467,
+                                        474
+                                    ],
+                                    "type": "text",
+                                    "content": "success recently to a variety of problems, ranging from my proof with Julie Clut-",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                473,
+                                467,
+                                486
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        473,
+                                        467,
+                                        486
+                                    ],
+                                    "type": "text",
+                                    "content": "terbuck of the sharp lower bound on the fundamental gap for Schrodinger operators ¨",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                484,
+                                467,
+                                498
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        484,
+                                        467,
+                                        498
+                                    ],
+                                    "type": "text",
+                                    "content": "[4] to Brendle’s proof of the Lawson conjecture [14] and my proof with Haizhong",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                496,
+                                467,
+                                511
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        496,
+                                        467,
+                                        511
+                                    ],
+                                    "type": "text",
+                                    "content": "Li of the Pinkall-Sterling conjecture [7]. I will discuss several other interesting ap-",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                509,
+                                467,
+                                521
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        509,
+                                        467,
+                                        521
+                                    ],
+                                    "type": "text",
+                                    "content": "plications below. The common thread in these techniques is the application of the",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                520,
+                                468,
+                                534
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        520,
+                                        468,
+                                        534
+                                    ],
+                                    "type": "text",
+                                    "content": "maximum principle to functions involving several points or to functions depending",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                533,
+                                468,
+                                545
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        533,
+                                        468,
+                                        545
+                                    ],
+                                    "type": "text",
+                                    "content": "on the global structure of solutions. Further related ideas, and more details on some",
+                                    "score": 1.0
+                                }
+                            ]
+                        },
+                        {
+                            "bbox": [
+                                132,
+                                544,
+                                443,
+                                557
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        544,
+                                        443,
+                                        557
+                                    ],
+                                    "type": "text",
+                                    "content": "of the methods presented here, can be found in the author’s survey article [1].",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        131,
+                        565,
+                        181,
+                        575
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 6,
+                    "lines": [
+                        {
+                            "bbox": [
+                                133,
+                                565,
+                                182,
+                                576
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        133,
+                                        565,
+                                        182,
+                                        576
+                                    ],
+                                    "type": "text",
+                                    "content": "Ben Andrews",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        131,
+                        575,
+                        467,
+                        586
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "index": 7,
+                    "lines": [
+                        {
+                            "bbox": [
+                                132,
+                                575,
+                                467,
+                                587
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        132,
+                                        575,
+                                        467,
+                                        587
+                                    ],
+                                    "type": "text",
+                                    "content": "Mathematical Sciences Institute, Australia National University, e-mail: Ben.Andrews@anu.edu.au",
+                                    "score": 1.0
+                                }
+                            ]
+                        }
+                    ],
+                    "merge_prev": false
+                }
+            ]
+        }
+    ],
+    "_backend": "hybrid",
+    "_ocr_enable": false,
+    "_vlm_ocr_enable": false,
+    "_version_name": "3.1.13"
+}

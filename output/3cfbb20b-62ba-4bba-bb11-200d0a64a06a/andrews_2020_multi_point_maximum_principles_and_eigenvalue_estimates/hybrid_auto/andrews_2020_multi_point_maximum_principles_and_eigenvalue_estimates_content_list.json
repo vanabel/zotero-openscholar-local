@@ -1,0 +1,4547 @@
+[
+    {
+        "type": "text",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            108,
+            779,
+            151
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Ben Andrews ",
+        "bbox": [
+            221,
+            178,
+            319,
+            191
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Abstract Estimates on modulus of continuity, isoperimetric profiles of various kinds, and quantities involving function values at several points have been central in several recent results in geometric analysis. In these lectures I will focus mostly on the applications to partial differential equations, and to estimates on eigenvalues. These lectures were presented at the MATRIX program on “Recent trends on Nonlinear PDE of Elliptic and Parabolic type” at Creswick, November 5-16, 2018. ",
+        "bbox": [
+            220,
+            321,
+            784,
+            407
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Acknowledgements This survey describes work supported by Discovery Projects grants DP0985802, DP120102462, and DP120100097, and Laureate Fellowship FL150100126 of the Australian Research Council. ",
+        "bbox": [
+            220,
+            425,
+            737,
+            462
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Introductory comments ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            499,
+            420,
+            514
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "In this article I want to describe some techniques which have been applied with some success recently to a variety of problems, ranging from my proof with Julie Clutterbuck of the sharp lower bound on the fundamental gap for Schrodinger operators ¨ [4] to Brendle’s proof of the Lawson conjecture [14] and my proof with Haizhong Li of the Pinkall-Sterling conjecture [7]. I will discuss several other interesting applications below. The common thread in these techniques is the application of the maximum principle to functions involving several points or to functions depending on the global structure of solutions. Further related ideas, and more details on some of the methods presented here, can be found in the author’s survey article [1]. ",
+        "bbox": [
+            220,
+            533,
+            784,
+            661
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Ben Andrews ",
+        "bbox": [
+            220,
+            671,
+            304,
+            683
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Mathematical Sciences Institute, Australia National University, e-mail: Ben.Andrews@anu.edu.au ",
+        "bbox": [
+            220,
+            683,
+            784,
+            696
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "page_number",
+        "text": "1 ",
+        "bbox": [
+            774,
+            783,
+            783,
+            791
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Lecture 1: Controlling the modulus of continuity in heat equations ",
+        "text_level": 1,
+        "bbox": [
+            220,
+            112,
+            707,
+            145
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "1.1 Moduli of continuity ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            164,
+            428,
+            181
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "Today I want to discuss how two-point maximum principles can be used to control the modulus of continuity for solutions of heat equations. This implies a lot of information including sharp gradient estimates. In particular the modulus of continuity estimates imply sharp decay estimates, which are the key to some sharp eigenvalue inequalities, the first of which we will reach by the end of today’s lecture. ",
+        "bbox": [
+            218,
+            199,
+            783,
+            269
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "Recall that for a function f (on a metric space), a function  of one positive variable is a modulus of continuity for $f \\operatorname { i f } \\omega ( s )$ bounds the difference in function values $\\left| f ( y ) - f ( x ) \\right|$ for all point with separation $d ( x , y ) = s .$ . ",
+        "bbox": [
+            220,
+            269,
+            783,
+            313
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "I will adopt a slightly different definition, for the sake of simplicity further down the track: We say  is a modulus of continuity for $f \\operatorname { i f }$ ",
+        "bbox": [
+            220,
+            313,
+            783,
+            341
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\frac {| f (y) - f (x) |}{2} \\leq \\omega \\left(\\frac {d (x , y)}{2}\\right)\n$$",
+        "text_format": "latex",
+        "bbox": [
+            401,
+            350,
+            603,
+            384
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "for all x and $y .$ This differs from the usual definition by the factors of $^ { 2 , }$ and the reason for these will become clear in a moment. For a time-dependent function $f ( x , t )$ , we say that a time-dependent function $\\omega ( s , t )$ is a modulus of continuity for f if $\\omega ( . , t )$ is a modulus of continuity for $f ( . , t )$ for each t, which means that ",
+        "bbox": [
+            220,
+            392,
+            783,
+            449
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\frac {| f (y , t) - f (x , t) |}{2} \\leq \\omega \\left(\\frac {d (x , y)}{2}, t\\right)\n$$",
+        "text_format": "latex",
+        "bbox": [
+            384,
+            458,
+            620,
+            491
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "for all x and y and all t. In particular, there is a smallest modulus of continuity (which we will sometimes call ‘the modulus of continuity of $f ^ { \\prime } )$ defined by ",
+        "bbox": [
+            220,
+            500,
+            783,
+            529
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\omega_ {f} (s, t) = \\sup \\left\\{\\frac {| f (y) - f (x) |}{2}: \\frac {d (x , y)}{2} = s \\right\\}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            344,
+            538,
+            660,
+            571
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "The following example is an important one: ",
+        "bbox": [
+            240,
+            580,
+            541,
+            594
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "Lemma 1. Suppose that f is a function on the real line which is odd, increasing, and concave on the positive half-line. Then ",
+        "bbox": [
+            220,
+            604,
+            783,
+            633
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\omega_ {f} (s) = f (s)\n$$",
+        "text_format": "latex",
+        "bbox": [
+            455,
+            644,
+            549,
+            659
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "$f o r s > 0 .$ ",
+        "bbox": [
+            218,
+            670,
+            290,
+            684
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "Proof. We will show that for any fixed $s > 0 ,$ , the supremum of $\\left| f ( y ) - f ( x ) \\right|$ among points with $| y - x | = 2 s$ is attained at the points $y = s , x = - s ,$ , so that $\\omega _ { f } ( s ) = $ ${ \\frac { f ( s ) - f ( - s ) } { \\gamma } } = f ( s )$ since $f$ is odd. First, we can assume that $y > x$ and $f ( y ) - f ( x ) =$ $\\left| f ( y ) - f ( x ) \\right|$ | since $f$ is increasing. Then the function $\\eta ( x ) = f ( x + s ) - f ( x - s )$ is even in x since f is odd, and we have for $x \\geq s$ that ",
+        "bbox": [
+            220,
+            695,
+            783,
+            757
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "page_number",
+        "text": "2 ",
+        "bbox": [
+            223,
+            90,
+            233,
+            99
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            220,
+            114,
+            566,
+            128
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "equation",
+        "text": "$$\nx - s = \\frac {2 s}{x + s} (0) + \\frac {x - s}{x + s} (x + s); \\quad s = \\frac {x}{x + s} (0) + \\frac {s}{x + s} (x + s),\n$$",
+        "text_format": "latex",
+        "bbox": [
+            289,
+            137,
+            712,
+            167
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "so since $f$ is concave on $[ 0 , x + s ]$ and $f ( 0 ) = 0$ we have ",
+        "bbox": [
+            220,
+            175,
+            600,
+            191
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "equation",
+        "text": "$$\nf (x - s) \\geq \\frac {x - s}{x + s} f (x + s); \\quad f (s) \\geq \\frac {s}{x + s} f (x + s); \\quad \\Longrightarrow f (x - s) + 2 f (s) \\geq f (x + s)\n$$",
+        "text_format": "latex",
+        "bbox": [
+            220,
+            202,
+            783,
+            228
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "which is equivalent to ",
+        "bbox": [
+            221,
+            237,
+            374,
+            250
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\eta (x) - \\eta (0) = f (x + s) - f (x - s) - f (s) + f (- s) = f (x + s) - f (x - s) - 2 f (s) \\leq 0.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            221,
+            263,
+            783,
+            279
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "If $0 < x < s$ then we have ",
+        "bbox": [
+            221,
+            290,
+            396,
+            303
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\eta (x) - \\eta (0) = f (x + s) - f (x - s) - 2 f (s) = f (x + s) + f (s - x) - 2 f (s) \\leq 0\n$$",
+        "text_format": "latex",
+        "bbox": [
+            242,
+            315,
+            764,
+            331
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "since $f$ is concave on the interval $[ s - x , s + x ] \\subset \\mathbb { R } _ { + }$ . Thus 0 is the global maximum of , as claimed. ",
+        "bbox": [
+            220,
+            341,
+            783,
+            370
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "We observe that if $f _ { 0 }$ is an odd, increasing function which is concave for positive values, then the same remains true for $f ( . , t )$ for each $t > 0 \\mathrm { i f } f$ satisfies the heat equation ",
+        "bbox": [
+            220,
+            376,
+            783,
+            418
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\frac {\\partial f}{\\partial t} = \\frac {\\partial^ {2} f}{\\partial s ^ {2}}. \\tag {1}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            460,
+            418,
+            784,
+            447
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "Thus we have the following curious corollary: ",
+        "bbox": [
+            221,
+            451,
+            534,
+            466
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "Corollary 1. $I f f _ { 0 }$ is an odd, increasing function which is concave for positive values, then $\\omega _ { f } ( s , t ) = f ( s , t )$ for all $s > 0$ and $t > 0 \\ i f f$ evolves by (1). In particular, the modulus of continuity of f satisfies the one-dimensional heat equation. ",
+        "bbox": [
+            220,
+            470,
+            783,
+            513
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "Furthermore, if u is a solution of the heat equation ",
+        "bbox": [
+            240,
+            514,
+            586,
+            527
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\frac {\\partial}{\\partial t} u = \\Delta u := \\sum_ {i = 1} ^ {n} \\frac {\\partial^ {2} u}{\\partial x _ {i} ^ {2}} \\tag {2}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            428,
+            539,
+            784,
+            571
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "on $\\mathbb { R } ^ { n }$ which depends on only one of the spatial variables, so that $u ( x _ { 1 } , \\cdots , x _ { n } , t ) =$ $f ( x _ { 1 } , t )$ , where f is as above, then $\\omega _ { u } ( s , t ) = f ( s , t )$ , and $\\omega _ { u }$ is a solution of the one-dimensional heat equation. ",
+        "bbox": [
+            220,
+            583,
+            783,
+            626
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "Later we will see this as the extreme case of a result for general solutions of heat equations. ",
+        "bbox": [
+            220,
+            632,
+            783,
+            659
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "1.2 Motivation: Zero counting for equations in one space variable ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            696,
+            769,
+            713
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "For equations in one spatial variable, we can use zero-counting methods to get a good understanding of how the modulus of continuity of a solution of the heat equation changes with time. This is based on the fact that the number of zeroes of a solution, or the number of intersections of two solutions, does not increase in time — a result first observed by Sturm in 1836 for solutions of the linear heat equation, and refined into a very general tool more recently, particularly through work of Hiroshi Matano, Sigurd Angenent and others. Roughly speaking, as long as new zeroes (or intersections) are not introduced on the boundary or at infinity, then new ones cannot appear. It is also true that the number strictly decreases whenever a zero (or intersection) becomes degenerate in the sense that the first derivative also vanishes, but we will not need this fact. ",
+        "bbox": [
+            220,
+            731,
+            783,
+            760
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "page_number",
+        "text": "",
+        "bbox": [
+            773,
+            90,
+            783,
+            99
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            218,
+            112,
+            783,
+            240
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "Consider a bounded smooth solution u : $\\mathbb { R } \\times \\mathbb { R } _ { + } \\to [ - M , M ]$ of the heat equation on the real line. We will use the zero-counting argument to compare u with the special solution of (1) with the same range $[ - M , M ]$ given by $\\scriptstyle \\varphi ( x , t ) = M \\operatorname { e r f } \\left( { \\frac { x - a } { \\sqrt { 2 t } } } \\right)$ for any $a \\in \\mathbb { R }$ . Since u is smooth and $\\varphi ( . , t )$ approaches a Heaviside function as $t $ 0, for any $\\varepsilon > 0 .$ , we have exactly one intersection between ${ \\bigl ( } 1 + \\varepsilon { \\bigr ) } \\varphi ( , t )$ and $u ( . , t )$ for $t > 0$ sufficiently small. Since the number of intersections does not increase with time (noting that $( 1 + \\varepsilon ) \\varphi \\to ( 1 + \\varepsilon ) M > u \\mathrm { a s } s \\to $ ∞ and $( 1 + \\varepsilon ) \\varphi \\to - ( 1 + \\varepsilon ) M < u$ as $s \\to - \\infty$ , so no new zeroes are produced near infinity), we have at most one intersection between $\\left( 1 + \\varepsilon \\right) \\varphi ( . , t )$ and $u ( . , t )$ for every $t > 0 ;$ on the other hand the asymptotics of  near $s = \\pm \\infty$ also imply that there is at least one intersection, by the intermediate value theorem. Therefore we have exactly one intersection between $\\left( 1 + \\varepsilon \\right) \\varphi ( . , t )$ and $u ( . , t )$ for each $t > 0$ . ",
+        "bbox": [
+            220,
+            241,
+            784,
+            418
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "For any given $x \\in$ R and $t > 0$ , there is a unique $a \\in$ R such that $( 1 + \\varepsilon ) \\varphi ( x , t ) =$ $u ( x , t )$ . Since there is only one intersection between $u \\big ( . , t \\big )$ and $\\displaystyle ( 1 + \\varepsilon ) \\varphi ( . , t )$ , and since $( 1 + \\varepsilon ) \\varphi ( s , t ) > u ( s , t )$ ) for large s, we have $u ( x + s , t ) < ( 1 + \\varepsilon ) \\varphi ( x + s , t )$ for $s > 0 .$ , and $u ( x + s , t ) > ( 1 + \\varepsilon ) \\varphi ( x + s , t )$ for $s < 0$ . This implies ",
+        "bbox": [
+            220,
+            419,
+            783,
+            476
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "equation",
+        "text": "$$\n| u (x + s, t) - u (x, t) | \\leq (1 + \\varepsilon) | \\varphi (x + s, t) - \\varphi (x, t) | \\leq 2 (1 + \\varepsilon) \\varphi \\left(\\frac {s}{2}, t\\right)\n$$",
+        "text_format": "latex",
+        "bbox": [
+            263,
+            486,
+            739,
+            512
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "by Lemma 1, since  is odd, increasing, and concave for positive values. We conclude that $\\omega _ { u } ( s , t ) \\leq ( 1 + \\varepsilon ) \\varphi ( s , t )$ . Finally, letting $\\varepsilon \\to 0$ we deduce that $\\omega _ { u } \\leq \\varphi$ . This gives a universal bound on the modulus of continuity for solutions of the heat equation, depending only on M. Notice that this result is sharp, since equality holds in the particular case where $u = \\varphi$ . ",
+        "bbox": [
+            218,
+            520,
+            783,
+            590
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "From the modulus of continuity estimate, we can also deduce a sharp gradient estimate: Taking $y  x .$ , we conclude that $\\begin{array} { r } { | u ^ { \\prime } ( x , t ) | \\leq \\varphi ^ { \\prime } ( 0 , t ) = \\frac { M } { \\sqrt { \\pi t } } . \\mathrm { ~ A g a i n } } \\end{array}$ , this is sharp because equality holds on the solution . ",
+        "bbox": [
+            218,
+            592,
+            783,
+            634
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "We remark that this argument is very robust, and applies equally well for solutions of other parabolic equations such as the $p { \\cdot } \\mathrm { I }$ Laplacian heat flows and graphical curve shortening flow. In fact, interpreted in the right way, this idea gives sharp estimates for arbitrary parabolic equations in one dimension, by comparison to solutions which approach a Heaviside function at the initial time. ",
+        "bbox": [
+            218,
+            636,
+            783,
+            706
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "Unfortunately there is no good analogue of the zero-counting argument known in higher dimensions, so we must find other ways to control the modulus of continuity. ",
+        "bbox": [
+            220,
+            707,
+            783,
+            734
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "page_number",
+        "text": "4 ",
+        "bbox": [
+            223,
+            90,
+            233,
+            99
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "In fact the result we just obtained does have a direct analogue in higher dimensions, but to prove it we instead use a two-point maximum principle argument. ",
+        "bbox": [
+            220,
+            112,
+            783,
+            143
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "1.3 The heat equation on Euclidean space ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            179,
+            574,
+            195
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "Now let us consider the case of the heat equation (2) on $\\mathbb { R } ^ { n }$ . For simplicity, we will start by considering solutions which approach a constant at infinity (this assumption can be removed but makes the argument simpler). ",
+        "bbox": [
+            218,
+            212,
+            783,
+            256
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "The maximum principle is a tool which can be used to show that pointwise inequalities (i.e. some function having a definite sign) can be preserved under a parabolic flow. In order to apply this to control the modulus of continuity, we first observe that the statement $\\ \" \\omega$ is a modulus of continuity for $u ^ { \\prime \\prime }$ is equivalent to the non-positivity of the function $Z$ defined by $Z ( x , y , t ) = u ( y , t ) - u ( x , t ) -$ $\\textstyle 2 \\omega \\left( { \\frac { | y - x | } { 2 } } , t \\right)$ ( |y−x| , t ). Thus we can try to apply a maximum principle to keep Z non-positive, if it is initially so (that is, if $\\omega ( . , 0 )$ is a modulus of continuity for $u ( . , 0 ) ,$ ). The price we pay for doing this is that Z is now a function of two points x and y as well as of t . ",
+        "bbox": [
+            220,
+            256,
+            784,
+            390
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "Proposition 1. Suppose that u is a smooth solution to the heat equation (2) on $\\mathbb { R } ^ { n }$ with $u ( x , t ) \\to 0$ as $| x |  \\infty$ and $| u ( x , t ) | \\leq M$ for all $\\scriptstyle ( x , t )$ . Suppose that $\\omega : \\mathbb { R } _ { + } \\times \\mathbb { R } _ { + } \\to \\mathbb { R } _ { + }$ satisfies (1) with $\\omega ( 0 , t ) = 0$ and lim $s \\infty \\omega ( s , t ) \\geq M ,$ , and such that $\\omega ( . , 0 )$ is a modulus of continuity $f o r u ( . , 0 )$ . Then $\\omega ( . , t )$ is a modulus of continuity for $u ( . , t )$ for each $t \\geq 0$ . ",
+        "bbox": [
+            220,
+            401,
+            786,
+            474
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "Proof. Fix $\\varepsilon > 0$ , and let $\\tilde { \\omega } ( s , t ) = \\omega ( s , t ) + \\varepsilon ( 1 + t )$ . We will prove that $Z ( x , y , t ) =$ $\\boldsymbol { u } ( y , t ) - \\boldsymbol { u } ( \\boldsymbol { x } , t ) - 2 \\tilde { \\omega } ( \\frac { | y - x | } { 2 } , t )$ is strictly negative. Note that $Z \\leq - \\varepsilon$ on $\\{ t = 0 \\}$ and $\\{ x = y \\}$ and as $| y - x | \\stackrel { - } { \\to } \\infty ,$ and since $u \\to 0$ at spatial infinity this also implies that $Z < 0$ for either |x| or |y| large. It follows that Z remains strictly negative unless there is some $\\left( x _ { 0 } , y _ { 0 } , t _ { 0 } \\right)$ with $x _ { 0 } \\neq y _ { 0 } , t _ { 0 } > 0 .$ , and ${ \\cal Z } ( x _ { 0 } , y _ { 0 } , t _ { 0 } ) = 0$ and $Z ( x , y , t ) \\le 0$ point: Here we have for all x and y and all $\\begin{array} { r } { \\frac { \\partial Z } { \\partial t } \\geq \\dot { 0 } . } \\end{array}$ $t \\in [ 0 , t _ { 0 } ]$ 0, and the spatial derivatives satisfy ]. We will derive a contradiction by considering this $D Z = 0$ and $D ^ { 2 } Z \\le 0$ The first inequality gives ",
+        "bbox": [
+            220,
+            483,
+            783,
+            600
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\leq \\frac {\\partial Z}{\\partial t} \\big | _ {(x _ {0}, y _ {0}, t _ {0})} = \\Delta u \\big | _ {(y _ {0}, t _ {0})} - \\Delta u \\big | _ {(x _ {0}, t _ {0})} - 2 \\frac {\\partial \\tilde {\\omega}}{\\partial t} \\big | _ {(\\frac {| y _ {0} - x _ {0} |}{2}, t _ {0})}, \\tag {3}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            304,
+            609,
+            784,
+            640
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "The inequality $D ^ { 2 } Z \\le 0$ is in the sense of posivite-definiteness of matrices, and this gives a lot of information since it involves a $( 2 n ) \\times ( 2 n )$ matrix (with n directions corresponding moving x, and the other n corresponding to moving y). We will only need to compute certain components of this matrix, chosen to extract useful inequalities. In order to do this, we first choose an orthonormal basis for $\\mathbb { R } ^ { n }$ for which $\\begin{array} { r } { e _ { n } = \\frac { y _ { 0 } - x _ { 0 } } { | y _ { 0 } - x _ { 0 } | } } \\end{array}$ . Then we consider two special variations: ",
+        "bbox": [
+            220,
+            649,
+            783,
+            740
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "page_number",
+        "text": "",
+        "bbox": [
+            774,
+            90,
+            783,
+            99
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "• Move x and y apart with equal velocities, i.e. $\\begin{array} { r } { \\frac { d } { d s } x = - e _ { n } , \\frac { d } { d s } y = e _ { n } } \\end{array}$ . Then we have $\\begin{array} { r } { \\frac { d } { d s } | y - x | = 2 } \\end{array}$ , and $\\begin{array} { r } { \\frac { d ^ { 2 } } { d s ^ { 2 } } | y - x | = 0 } \\end{array}$ , so we obtain ",
+        "bbox": [
+            220,
+            112,
+            783,
+            149
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\geq \\frac {d ^ {2}}{d s ^ {2}} Z = D _ {n} D _ {n} u | _ {(y _ {0}, t _ {0})} - D _ {n} D _ {n} u | _ {(x _ {0}, t _ {0})} - 2 \\tilde {\\omega} ^ {\\prime \\prime} | _ {\\left(\\frac {| y _ {0} - x _ {0} |}{2}, t _ {0}\\right)}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            302,
+            158,
+            702,
+            190
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "• Move x and y in parallel in a direction orthogonal to the line between them, i.e. $\\textstyle { \\frac { d } { d s } } x = { \\frac { d } { d s } } y = e _ { i }$ for some $i < n$ . Then we have $| y - x |$ constant, and so ",
+        "bbox": [
+            221,
+            198,
+            783,
+            229
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\geq \\frac {d ^ {2}}{d s ^ {2}} Z = D _ {i} D _ {i} u \\big | _ {(y _ {0}, t _ {0})} - D _ {i} D _ {i} u \\big | _ {(x _ {0}, t _ {0})}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            364,
+            239,
+            638,
+            268
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "Adding these inequalities over all i gives ",
+        "bbox": [
+            242,
+            278,
+            519,
+            292
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\geq \\Delta u | _ {(y _ {0}, t _ {0})} - \\Delta u | _ {(x _ {0}, t _ {0})} = 2 \\tilde {\\omega} ^ {\\prime \\prime} | _ {(\\frac {| y _ {0} - x _ {0} |}{2}, t _ {0})}. \\tag {4}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            356,
+            302,
+            784,
+            325
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "Now we combine the inequalities (3) and (4) to give ",
+        "bbox": [
+            240,
+            334,
+            596,
+            349
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\partial_ {r} \\tilde {\\omega} \\leq \\tilde {\\omega} ^ {\\prime \\prime}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            465,
+            359,
+            541,
+            375
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "at the point $\\left( \\frac { | y _ { 0 } - x _ { 0 } | } { 2 } , t _ { 0 } \\right)$ . But this is impossible, since ",
+        "bbox": [
+            220,
+            384,
+            584,
+            407
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\partial_ {t} \\tilde {\\omega} = \\partial_ {t} \\omega + \\varepsilon = \\omega^ {\\prime \\prime} + \\varepsilon > \\omega^ {\\prime \\prime} = \\tilde {\\omega} ^ {\\prime \\prime}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            373,
+            417,
+            631,
+            432
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "This is a contradiction. Therefore such a point $\\left( x _ { 0 } , y _ { 0 } , t _ { 0 } \\right)$ cannot occur, and Z stays negative. Finally, letting  approach zero gives the result of the Proposition, that $\\omega ( . , t )$ is a modulus of continuity for $u ( . , t )$ for each t. ",
+        "bbox": [
+            220,
+            445,
+            783,
+            488
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "It may be useful to make some remarks here about the particular directions which were used to obtain second derivative inequalities: The guide here is the ‘equality case’, which is when the solution is a ‘one-dimensional’ solution of the form $u ( x , t ) = f ( x \\cdot e _ { 1 } , t )$ , where $f$ is odd, increasing, and concave for positive values. As we saw earlier, in this case the modulus of continuity of u is $f ,$ and equality is attained at the points of the form $( x , - x , t )$ for $x > 0$ . That is, the equality set in this special case is $\\{ ( x , y , t ) : y { \\cdot } e _ { 1 } = - x { \\cdot } e _ { 1 } \\}$ . In the argument we are using the inequality $D ^ { 2 } Z \\le 0$ in some direction, so if we want to get a sharp inequality (and not throw anything away) we can only use those directions for which $D ^ { 2 } Z = 0$ in the equality case. It is easy to see that these are just the ones that we chose in the argument: The directions where equality holds are spanned by those where x and y move in parallel in a direction orthogonal to $e _ { 1 }$ , and that where x and $y$ move in opposite directions along the line between them. This principle is often a useful guide in constructing these arguments for two-point maximum principles. ",
+        "bbox": [
+            220,
+            499,
+            784,
+            697
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "As a consequence of the above modulus of continuity estimate, we can deduce the same sharp gradient bound as the zero-counting argument gave us, but now in any dimension: ",
+        "bbox": [
+            220,
+            697,
+            783,
+            739
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "page_number",
+        "text": "6 ",
+        "bbox": [
+            223,
+            90,
+            233,
+            99
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "Corollary 2. Let u be a smooth solution to the heat equation $( 2 )$ on $\\mathbb { R } ^ { n } { } _ { ; }$ , with $| u ( x , t ) | \\leq M$ and approaching zero at infinity. Then $\\begin{array} { r } { | D u ( \\bar { x , t } ) | \\leq \\frac { M } { \\sqrt { \\pi t } } f o r \\ a l l \\ x \\in \\mathbb { R } ^ { n } } \\end{array}$ and $t \\geq 0$ . ",
+        "bbox": [
+            220,
+            112,
+            783,
+            159
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "Proof. We can apply the Proposition with $\\begin{array} { r } { \\omega ( s , t ) = M \\mathrm { e r f } \\left( \\frac { s } { 2 \\sqrt { t + a } } \\right) } \\end{array}$ for any sufficiently small $a > 0$ . Letting $a \\to 0$ gives the same bound on the modulus of continuity as for the one-dimensional case, and the same gradient bound. ",
+        "bbox": [
+            220,
+            168,
+            783,
+            217
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "1.4 The Neumann heat equation on a bounded domain ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            253,
+            680,
+            269
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "Next we consider solutions of the heat equation on bounded domains. The simplest case to consider is the Neumann condition, though (non-sharp) results can be obtained for other cases. The main result for the Neumann case is the following: ",
+        "bbox": [
+            220,
+            287,
+            783,
+            331
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "Proposition 2. Let  be a (smooth) bounded (strictly) convex domain in $\\mathbb { R } ^ { n }$ with diameter $D = \\operatorname* { s u p } \\{ | y - x | : x , y \\in \\Omega \\}$ , and let u be a (smooth) solution of the heat equation (2) on $\\varOmega \\times \\mathbb { R } _ { + }$ , satisfying the Neumann condition $D _ { \\nu } u = 0$ on $\\partial \\varOmega \\times \\mathbb { R } _ { + }$ . Suppose that $\\omega : \\ [ 0 , D / 2 ] \\times \\mathbb { R } _ { + } \\to \\mathbb { \\mathbb { 1 } }$ R is a solution of the one-dimensional heat equation (1) such that $\\omega ^ { \\prime } ( s , t ) \\ge 0$ and $\\omega ( 0 , t ) = 0 ,$ , and such that $\\omega ( . , 0 )$ is a modulus of continuity for $u ( . , 0 )$ . Then $\\omega ( . , t )$ is a modulus of continuity for $u \\big ( . , t \\big )$ ) for each $t \\geq 0$ . ",
+        "bbox": [
+            220,
+            340,
+            784,
+            441
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "Proof. The proof is similar to the one we just gave, but we must also deal with the possibility that the maximum occurs on the boundary. As before, we first modify in order to obtain strict inequalities: Set $\\tilde { \\omega } ( s , t ) = \\omega ( s , t ) + \\varepsilon ( 1 + t ) + \\varepsilon s$ . Since Z is continuous on the compact set $\\bar { \\varOmega } \\times \\bar { \\varOmega }$ , it attains a maximum at each time, and the maximum is a continuous function of time. Therefore if Z does not remain negative, there is a first time $t _ { 0 } > 0$ where the maximum of Z reaches zero, and a point $( x _ { 0 } , y _ { 0 } )$ in $\\bar { \\varOmega } \\times \\bar { \\varOmega }$ where this occurs. Since $Z \\leq - \\varepsilon \\ \\mathrm { o n } \\ \\{ x = y \\}$ , we know that $x _ { 0 } \\neq y _ { 0 }$ . This leaves two possibilities: Either $\\left( x _ { 0 } , y _ { 0 } \\right)$ is in the boundary $\\partial \\Omega \\times \\bar { \\Omega } \\cup \\bar { \\Omega } \\times \\partial \\Omega$ , or both x0 and $y _ { 0 }$ are interior points of . In the latter case, we derive a contradiction exactly as before, since $\\partial _ { t } \\tilde { \\omega } > \\tilde { \\omega } ^ { \\prime \\prime }$ . So we need only consider the case where $x _ { 0 } \\in \\partial \\Omega$ (the case $y _ { 0 } \\in \\partial \\varOmega$ is similar). ",
+        "bbox": [
+            220,
+            450,
+            783,
+            606
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "We compute the derivative of Z in the direction where ${ \\dot { x } } = - \\nu$ (where is the outward-pointing unit normal to $\\partial \\varOmega$ at x0), and $\\dot { y } = 0$ . Since $D _ { \\nu } u | _ { ( x _ { 0 } , t _ { 0 } ) } = 0$ by the Neumann condition, we have ",
+        "bbox": [
+            220,
+            607,
+            783,
+            650
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "equation",
+        "text": "$$\nD _ {(- \\nu , 0)} Z \\big | _ {(x _ {0}, y _ {0}, t _ {0})} = - \\tilde {\\omega} ^ {\\prime} \\big | _ {(\\frac {| y _ {0} - x _ {0}}{2}, t _ {0})} \\left\\langle \\frac {y _ {0} - x _ {0}}{| y _ {0} - x _ {0} |}, \\nu \\right\\rangle > 0\n$$",
+        "text_format": "latex",
+        "bbox": [
+            319,
+            659,
+            687,
+            692
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "since $\\langle y _ { 0 } - x _ { 0 } , \\nu \\rangle < 0$ by the strict convexity of $\\varOmega$ , and $\\tilde { \\omega } ^ { \\prime } = \\omega ^ { \\prime } + \\varepsilon > 0$ . This contradicts the assumption that $Z$ attains a maximum at $( x _ { 0 } , y _ { 0 } )$ ) at time $t _ { 0 } ,$ , and the proof is complete. ",
+        "bbox": [
+            220,
+            700,
+            783,
+            744
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "page_number",
+        "text": "",
+        "bbox": [
+            774,
+            90,
+            783,
+            99
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "As before, we obtain sharp gradient estimates, determined by the gradient of the solution of the one-dimensional heat equation with Neumann condition and Heaviside initial data on the interval $\\left[ - D / 2 , D / 2 \\right]$ . In fact the modulus of continuity control allows us to prove a famous eigenvalue inequality, the Payne-Weinberger inequality: ",
+        "bbox": [
+            220,
+            112,
+            783,
+            185
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "1.5 The Payne-Weinberger inequality ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            221,
+            534,
+            237
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Theorem 1 ([30]). If  is a bounded convex domain with diameter D in $\\mathbb { R } ^ { n }$ , then the first Neumann eigenvalue ",
+        "bbox": [
+            220,
+            255,
+            783,
+            285
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\lambda_ {1} ^ {N} (\\Omega) = \\inf \\left\\{\\int_ {\\Omega} | D u | ^ {2}: u \\in H ^ {1} (\\Omega), \\int_ {\\Omega} u = 0 \\right\\}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            332,
+            294,
+            670,
+            326
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "is no less than $\\textstyle { \\frac { \\pi ^ { 2 } } { D ^ { 2 } } }$ . ",
+        "bbox": [
+            221,
+            336,
+            349,
+            357
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Proof. By approximation, it suffices to consider the case where the boundary of is smooth and strictly convex. Let $u _ { 1 }$ be the first eigenfunction of the Neumann Laplacian, so that $\\Delta u _ { 1 } + \\lambda _ { 1 } ^ { N } u _ { 1 } = 0$ on , with $D _ { \\nu } u _ { 1 } = 0$ on $\\partial \\varOmega$ . Then define $u ( x , t ) = \\mathbf { e } ^ { - \\lambda _ { 1 } ^ { N } t } u _ { 1 } ( x )$ , so that u is a smooth solution of the Neumann heat equation on . We can apply Proposition 2 with $\\begin{array} { r } { \\pmb { \\omega } ( s , t ) = \\pmb { C } \\mathbf { e } ^ { - \\frac { \\pi ^ { 2 } } { D ^ { 2 } } t } \\sin \\left( \\frac { \\pi s } { D } \\right) } \\end{array}$ −  2 t , since this satisfies the one-dimensional heat equation on $[ 0 , D / 2 ]$ and is increasing and positive, provided we choose C sufficiently large to ensure that $\\omega ( . , 0 )$ is a modulus of continuity for $u _ { 1 }$ (this can always be done since $u _ { 1 }$ is smooth). ",
+        "bbox": [
+            220,
+            363,
+            783,
+            487
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "This implies that for any x and $y , \\ | u ( y , t ) - u ( x , t ) | \\leq \\omega ( D / 2 , t ) = C \\mathrm { e } ^ { - \\frac { \\pi ^ { 2 } } { D ^ { 2 } } t }$ . In particular this implies ",
+        "bbox": [
+            220,
+            488,
+            783,
+            523
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\mathrm{osc} u _ {1} \\mathrm{e} ^ {- \\lambda_ {1} ^ {N} t} \\leq C \\mathrm{e} ^ {- \\frac {\\pi^ {2}}{D ^ {2}} t}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            426,
+            523,
+            579,
+            544
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "for each $t \\geq 0$ . Taking t → ∞ implies that $\\begin{array} { r } { \\lambda _ { 1 } ^ { N } \\ge \\frac { \\pi ^ { 2 } } { D ^ { 2 } } } \\end{array}$ , as claimed. ",
+        "bbox": [
+            220,
+            549,
+            650,
+            570
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Notes: The modulus of continuity bounds as presented here were developed in a series of papers with Julie Clutterbuck [2, 3]. The proof of the Payne-Weinberger inequality was included in [4]. ",
+        "bbox": [
+            220,
+            577,
+            783,
+            620
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "page_number",
+        "text": "8 ",
+        "bbox": [
+            223,
+            90,
+            233,
+            99
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Lecture 2: Heat equations on Riemannian manifolds and nonlinear eigenvalues ",
+        "text_level": 1,
+        "bbox": [
+            220,
+            112,
+            712,
+            145
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "2.1 Riemannian manifolds: Distance, Curvature and heat equations ",
+        "text_level": 1,
+        "bbox": [
+            220,
+            164,
+            705,
+            198
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "In this lecture we will investigate the application of the ideas we developed in the first lecture to a more general context, including equations more general than the heat equation, and domains more general than Euclidean domains. In order to do this we first need to review some Riemannian geometry. ",
+        "bbox": [
+            218,
+            215,
+            783,
+            272
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "A Riemannian manifold is a smooth manifold M equipped with a Riemannian metric, which is a smoothly varying inner product $g _ { x }$ on each tangent space $T _ { x } M$ . This allows us to make sense of the length of a smooth curve $\\sigma \\colon [ a , b ] \\to M$ by setting ",
+        "bbox": [
+            220,
+            272,
+            784,
+            329
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "equation",
+        "text": "$$\nL [ \\pmb {\\sigma} ] = \\int_ {a} ^ {b} \\sqrt {g _ {\\pmb {\\sigma} (s)} (\\pmb {\\sigma} ^ {\\prime} (s) , \\pmb {\\sigma} ^ {\\prime} (s))} d s,\n$$",
+        "text_format": "latex",
+        "bbox": [
+            383,
+            329,
+            625,
+            357
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "where $\\sigma ^ { \\prime } ( s ) \\in T _ { \\sigma ( s ) } M$ is the tangent vector to the curve. The length then allows us to define a distance function (if M is path-connected), called the Riemannian distance, by setting ",
+        "bbox": [
+            220,
+            363,
+            783,
+            405
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "equation",
+        "text": "$$\nd (x, y) := \\inf \\left\\{L [ \\sigma ]: \\sigma \\in C ^ {\\infty} ([ 0, 1 ], M), \\sigma (0) = x, \\sigma (1) = y \\right\\}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            295,
+            417,
+            710,
+            432
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "This defines a distance function in the sense of metric spaces. If the manifold is metrically complete, then the Hopf-Rinow theorem tells us that the distance between points is attained by a (possibly non-unique) geodesic, which is a locally length-minimizing curve. In the case where the manifold is Rn and the Riemannian metric is the Euclidean inner product, this is the usual Euclidean distance and the geodesics are straight lines. This is still true if M is a convex subset of Rn, but not for non-convex subsets. In general, the distance function is not smooth (for a simple example, consider the unit circle with arc length parameter s from some given point $p ,$ on which the distance from $p$ is non-smooth at the antipodal point $s = \\pi .$ , where it looks like $\\pi - | s - \\pi | )$ . ",
+        "bbox": [
+            220,
+            443,
+            784,
+            585
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "The Riemannian metric also defines a connection, which is a differential operator acting on vector fields. This is called the Riemannian connection or Levi-Civita connection, and is uniquely determined by the conditions that it be symmetric (so that $\\nabla _ { i } \\partial _ { j } = \\nabla _ { j } \\partial _ { i }$ in any local chart) and that it is compatible with the Riemannian metric, so that differentiating an inner product gives the same result as differentiating the vector fields inside the inner product, in the sense that ",
+        "bbox": [
+            220,
+            586,
+            783,
+            671
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "equation",
+        "text": "$$\nd _ {w} g (U, V) = g (\\nabla_ {w} U, V) + g (U, \\nabla_ {w} V)\n$$",
+        "text_format": "latex",
+        "bbox": [
+            376,
+            682,
+            631,
+            697
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "for any vector fields U and V and any vector w. The geodesics are then (up to reparametrisation) the curves which have parallel tangent vector, so that $\\nabla _ { s } \\sigma ^ { \\prime } ( s ) = 0$ along . Accordingly, there is a unique geodesic starting at any point with any given initial tangent vector, and this defines the exponential map: This takes any tangent vector v at a point x of M to the endpoint $\\exp _ { x } ( \\nu )$ of the geodesic $\\sigma \\colon [ 0 , 1 ] \\to M$ with $\\sigma ( 0 ) = x$ and $\\sigma ^ { \\prime } ( 0 ) = \\nu$ . This always exists for small v, but may not exist for all v (the Hopf-Rinow theorem guarantees global existence if M is metrically complete, however). ",
+        "bbox": [
+            220,
+            709,
+            783,
+            752
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "page_number",
+        "text": "9 ",
+        "bbox": [
+            773,
+            90,
+            783,
+            99
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            220,
+            112,
+            783,
+            184
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "text",
+        "text": "The curvature tensor measures the failure of the commutation of differentiation using the Riemannian connection: For vector fields U,V,W, Z it is defined by ",
+        "bbox": [
+            220,
+            185,
+            783,
+            212
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "equation",
+        "text": "$$\nR (U, V, W, Z) = g \\left(\\nabla_ {V} \\nabla_ {U} W - \\nabla_ {U} \\nabla_ {V} W - \\nabla_ {[ V, U ]} W, Z\\right).\n$$",
+        "text_format": "latex",
+        "bbox": [
+            319,
+            224,
+            682,
+            242
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "text",
+        "text": "Given a pair of orthonormal unit vectors $e _ { 1 }$ and $e _ { 2 } ,$ , the sectional curvature of the plane they generate is defined by $R ( e _ { 1 } , e _ { 2 } , e _ { 1 } , e _ { 2 } )$ (this is independent of the choice of orthonormal basis for this plane). Given a unit vector $e _ { 1 }$ , the Ricci curvature in direction $e _ { 1 }$ is defined by ",
+        "bbox": [
+            220,
+            250,
+            783,
+            307
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\operatorname{Rc} \\left(e _ {1}, e _ {1}\\right) = \\sum_ {j > 1} R \\left(e _ {1}, e _ {j}, e _ {1}, e _ {j}\\right),\n$$",
+        "text_format": "latex",
+        "bbox": [
+            391,
+            317,
+            613,
+            346
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "text",
+        "text": "for any orthonormal basis $\\left\\{ \\boldsymbol { e } _ { i } \\right\\}$ completing $e _ { 1 }$ . The Ricci curvature will be particularly important in what follows, as it arises naturally when computing Laplacians of the distance function. ",
+        "bbox": [
+            220,
+            356,
+            783,
+            398
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "text",
+        "text": "For a smooth function f on M, the Hessian of f is the second derivative computed using the Riemannian connection, so that $\\nabla ^ { 2 } f ( u , \\nu ) = D _ { u } ( D _ { \\nu } f ) - D _ { \\nabla _ { u } \\nu } f$ for any vectors u and v. Equivalently, $\\begin{array} { r } { \\nabla ^ { 2 } f ( e , e ) = \\frac { d ^ { 2 } } { d s ^ { 2 } } f \\circ \\pmb { \\sigma } ( s ) \\big | _ { s = 0 } , } \\end{array}$ , where  is the geodesic in M with $\\sigma ^ { \\prime } ( 0 ) = e .$ . The Laplacian $\\Delta f$ of f is the trace of the Hessian with respect to the metric (equivalently, the sum of diagonal elements with respect to any orthonormal basis). This allows us to make sense of the heat equation on a Riemannian manifold. More generally, we will consider quasilinear equations (with cefficients depending on the gradient) which are ‘isotropic’, in the sense that the diffusion coefficients are unchanged by any orthogonal transformation fixing the gradient vector. This means that the equation has the form ",
+        "bbox": [
+            220,
+            399,
+            784,
+            545
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\frac {\\partial u}{\\partial t} = \\mathcal {L} [ u ] := \\left[ a (| D u |) \\frac {u _ {i} u _ {j}}{| D u | ^ {2}} + b (| D u |) \\left(\\delta^ {i j} - \\frac {u _ {i} u _ {j}}{| D u | ^ {2}}\\right) \\right] \\nabla_ {i} \\nabla_ {j} u, \\tag {5}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            282,
+            555,
+            784,
+            588
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "text",
+        "text": "where a and b are positive functions. Examples include the heat equation with $a =$ $b = 1$ , the $p { \\mathrm { - } } \\mathbf { I }$ aplacian heat flows with $a = | D u | ^ { p - 2 }$ and $b = ( p - 1 ) | D u | ^ { p - 2 }$ , and the graphical mean curvature flow with a = 11+|Du|2 $\\begin{array} { r } { a = \\frac { 1 } { 1 + | D u | ^ { 2 } } } \\end{array}$ and $b = 1$ . ",
+        "bbox": [
+            220,
+            596,
+            783,
+            643
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "text",
+        "text": "2.2 The Ricci non-negative case ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            677,
+            489,
+            694
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "text",
+        "text": "In this lecture we will only consider the simplest case, where the Ricci curvature is non-negative on M. We will assume for now that M is compact. We allow the possibility that M has boundary, but in that case we require that the boundary is convex. In this case there is a version of the Hopf-Rinow theorem which says that the distance between any pair of points in M is attained by a geodesic. ",
+        "bbox": [
+            220,
+            712,
+            783,
+            755
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "page_number",
+        "text": "10 ",
+        "bbox": [
+            223,
+            90,
+            240,
+            99
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            220,
+            112,
+            783,
+            142
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "The result is as follows: ",
+        "bbox": [
+            240,
+            143,
+            406,
+            155
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "Proposition 3. Let M be a compact Riemannian manifold with convex (or empty) boundary, with non-negative Ricci curvature and diameter $D = \\operatorname* { s u p } \\{ d ( x , y ) : x , y \\in$ $M \\}$ . Let u be a smooth solution of equation $( 5 )$ with Neumann boundary condition $D _ { \\nu } u = 0$ on $\\partial M _ { ; }$ , where a and b are positive functions. Suppose that $\\omega _ { 0 }$ is a modulus of continuit $y f o r u ( . , 0 )$ , which is increasing, and suppose  satisfies $\\omega \\geq a ( \\omega ^ { \\prime } ) \\omega ^ { \\prime \\prime }$ on $[ 0 , D / 2 ] \\times [ 0 , T )$ , with $\\omega ( 0 , t ) = 0$ and $\\omega ^ { \\prime } ( D / 2 , t ) = 0$ . Then $\\omega ( . , t )$ is a modulus of continuity for $u \\big ( . , t \\big )$ for each $t \\geq 0 .$ . ",
+        "bbox": [
+            220,
+            167,
+            783,
+            267
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "Proof. Assuming a and b are smooth and positive, we can find a sequence $\\omega _ { \\varepsilon }$ which strictly decreases uniformly to  as $\\varepsilon  0 ,$ , such that $\\partial _ { t } \\omega _ { \\varepsilon } > a ( \\bar { \\omega _ { \\varepsilon } ^ { \\prime } } ) \\omega _ { \\varepsilon } ^ { \\prime \\prime }$ and $\\omega _ { \\varepsilon } ^ { \\prime } ( s , t ) > 0$ on $( 0 , D / 2 ) \\times [ 0 , T )$ . As before, define $Z \\colon M \\times M \\times [ 0 , T ) $ R by $\\begin{array} { r } { Z ( x , y , t ) = u ( y , t ) - u ( x , t ) - 2 \\omega _ { \\varepsilon } \\left( \\frac { d ( x , y ) } { 2 } , t \\right) } \\end{array}$ ( d(x,y)2 , t), where d is the Riemannian distance. By assumption $Z$ is strictly negative at $t = 0$ , and where $x = y$ for any t. We consider a point $\\left( x _ { 0 } , y _ { 0 } , t _ { 0 } \\right)$ where Z first becomes zero, noting that we have $y _ { 0 } \\neq x _ { 0 }$ . ",
+        "bbox": [
+            220,
+            277,
+            783,
+            368
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "Now we must confront the difficulty that Z is in general not a smooth function: Since the Riemannian distance is not smooth (just Lipschitz in general) we cannot just differentiate $Z$ in some direction to deduce inequalities. To get around this problem, we go back to the definition of distance as an infimum of lengths of paths, and extend $Z$ to a function which lives on a space of paths. In doing this we appear to sacrifice something, since we now have to deal with functions defined on an infinite-dimensional space, but we gain smoothness: We define $\\tilde { Z }$ to be the function on $C ^ { \\infty } ( [ 0 , 1 ] , M ) \\times [ 0 , T )$ defined by ",
+        "bbox": [
+            220,
+            369,
+            783,
+            483
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\tilde {Z} [ \\sigma , t ] = u (\\sigma (1), t) - u (\\sigma (0), t) - 2 \\omega_ {\\varepsilon} \\left(\\frac {L [ \\sigma ]}{2}, t\\right).\n$$",
+        "text_format": "latex",
+        "bbox": [
+            329,
+            493,
+            675,
+            525
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "This corresponds naturally to $Z$ when is a length-minimising geodesic, and since $\\omega _ { \\varepsilon }$ is non-decreasing in the first argument we always have the inequality $\\tilde { Z } [ \\sigma , t ] \\leq$ $Z ( \\sigma ( 0 ) , \\sigma ( 1 ) , t )$ , with equality if  is a length-minimising geodesic. Importantly for us, $\\tilde { Z }$ is smooth, in the sense that if $\\sigma : \\ [ 0 , 1 ] \\times I  M$ is a smooth family of paths, then $\\tilde { Z } [ \\sigma ( . , r ) , t ]$ is a smooth function of r and t. ",
+        "bbox": [
+            220,
+            533,
+            783,
+            604
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "It is useful to compute the derivatives of the length under such smooth variations: For the first derivative, we have ",
+        "bbox": [
+            220,
+            605,
+            783,
+            632
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\frac {d}{d r} L [ \\sigma (., r) ] = \\int_ {0} ^ {1} \\frac {g (\\sigma_ {s} , \\nabla_ {r} \\sigma_ {s})}{| \\sigma_ {s} |} d s \\tag {6}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            386,
+            642,
+            784,
+            674
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "where the subscripts denote derivatives, and s represents the parameter along the curve, while r represents the variation parameter through the family of curves. Using the symmetry of the connection, and the compatibility of the connection with the metric, and assuming we have parametrised at constant speed (so that $\\left| \\sigma _ { s } \\right|$ | is constant in s) we can re-write this as follows: ",
+        "bbox": [
+            220,
+            683,
+            783,
+            753
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "page_number",
+        "text": "11 ",
+        "bbox": [
+            766,
+            90,
+            783,
+            99
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\begin{array}{l} \\frac {d}{d r} L [ \\sigma (., r) ] = \\int_ {0} ^ {1} \\frac {g (\\sigma_ {s} , \\nabla_ {s} \\sigma_ {r})}{| \\sigma_ {s} |} d s \\\\ = g \\left(\\frac {\\sigma_ {s}}{\\left| \\sigma_ {s} \\right|}, \\sigma_ {r}\\right) \\bigg | _ {0} ^ {1} - \\int_ {0} ^ {1} \\frac {g \\left(\\nabla_ {s} \\sigma_ {s} , \\sigma_ {r}\\right)}{\\left| \\sigma_ {s} \\right|} d s \\tag {7} \\\\ \\end{array}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            332,
+            112,
+            783,
+            178
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "In particular if  is a geodesic then $\\nabla _ { s } \\pmb { \\sigma } _ { s } = 0$ , and the second term vanishes. ",
+        "bbox": [
+            220,
+            187,
+            734,
+            202
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "The second derivative may be computed by differentiating (6) with respect to $r .$ We do this assuming that  is a geodesic (so that $\\left| \\sigma _ { s } \\right| = L )$ , and obtain the following: ",
+        "bbox": [
+            220,
+            203,
+            783,
+            231
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\begin{array}{l} \\frac {d ^ {2}}{d r ^ {2}} L [ \\sigma (., r) ] \\big | _ {r = 0} = \\frac {1}{L} \\int_ {0} ^ {1} | (\\nabla_ {r} \\sigma_ {s}) ^ {\\perp} | ^ {2} + g (\\sigma_ {s}, \\nabla_ {r} \\nabla_ {r} \\sigma_ {s}) d s \\\\ = \\frac {1}{L} \\int_ {0} ^ {1} \\left| \\left(\\nabla_ {r} \\sigma_ {s}\\right) ^ {\\perp} \\right| ^ {2} + g \\left(\\sigma_ {s}, \\nabla_ {s} \\nabla_ {r} \\sigma_ {r}\\right) + R \\left(\\sigma_ {r}, \\sigma_ {s}, \\sigma_ {r}, \\sigma_ {s}\\right) d s \\\\ = \\frac {1}{L} \\int_ {0} ^ {1} \\left| \\left(\\nabla_ {r} \\sigma_ {s}\\right) ^ {\\perp} \\right| ^ {2} - R \\left(\\sigma_ {r}, \\sigma_ {s}, \\sigma_ {r}, \\sigma_ {s}\\right) d s + g \\left(\\frac {\\sigma_ {s}}{\\left| \\sigma_ {s} \\right|}, \\nabla_ {r} \\sigma_ {r}\\right) \\Bigg | _ {0} ^ {1}. \\tag {8} \\\\ \\end{array}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            233,
+            239,
+            784,
+            354
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "Using (7) we can rule out the possibility that $x _ { 0 }$ or $y _ { 0 }$ is in the boundary, in exactly the same way as in the Euclidean setting: If 0 is a minimising geodesic from $x _ { 0 } \\in$ $\\partial M$ to y0, define a smooth variation $\\sigma : \\ [ 0 , 1 ] \\times ( - \\delta , \\delta )  M$ as follows: Set $e =$ $- \\nu \\in T _ { x } M$ , and parallel transport along  to obtain $e ( s ) \\in T _ { \\sigma _ { 0 } ( s ) } M$ such that $\\nabla _ { s } e =$ 0. Then define $\\sigma ( s , r ) = \\exp _ { \\sigma _ { 0 } ( s ) } \\left( r ( 1 - s ) e ( s ) \\right)$ ). Note that when $r = 0$ this returns $\\sigma _ { 0 } ( s )$ , and  exists for small r and is smooth in s and r. We have $\\sigma _ { r } ( s ) = ( 1 - s ) e ( s )$ , so $\\sigma _ { r } ( 0 ) = - \\nu$ and $\\sigma _ { r } ( 1 ) = 0$ . This gives (since $D _ { \\nu } u = 0$ by the Neumann condition) ",
+        "bbox": [
+            220,
+            363,
+            783,
+            464
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\left. \\frac {d}{d r} \\tilde {Z} [ \\sigma (., r), t _ {0} ] \\right| _ {r = 0} = - \\omega_ {\\varepsilon} ^ {\\prime} g \\left(\\frac {\\sigma_ {s}}{| \\sigma_ {s} |}, \\gamma_ {r}\\right) \\Bigg | _ {0} ^ {1} = \\omega_ {\\varepsilon} ^ {\\prime} g _ {x} \\left(\\frac {\\sigma_ {0} ^ {\\prime} (0)}{| \\sigma_ {0} ^ {\\prime} (0) |}, - \\nu\\right) > 0\n$$",
+        "text_format": "latex",
+        "bbox": [
+            267,
+            475,
+            739,
+            508
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "since $\\sigma _ { 0 } ^ { \\prime }$ points strictly into M at x and $\\omega _ { \\varepsilon } ^ { \\prime } > 0$ . This contradicts the claim that $Z ( . , . , t _ { 0 } )$ has a maximum at $( x _ { 0 } , y _ { 0 } )$ since this would imply that $\\tilde { Z } ( . , t _ { 0 } )$ has a maximum at $\\sigma _ { 0 }$ . ",
+        "bbox": [
+            220,
+            519,
+            783,
+            560
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "It follows therefore that $Z ( . , . , t _ { 0 } )$ attains a maximum for $x _ { 0 } \\neq y _ { 0 }$ both interior points of $M ,$ and therefore that $\\tilde { Z } ( . , t _ { 0 } )$ attains a maximum at $\\sigma _ { 0 } .$ , where $\\sigma _ { 0 }$ is a minimising geodesic from x0 to y0. For convenience we choose an orthonormal basis {ei} for Tx0 M with en = | $\\left\\{ \\boldsymbol { e } _ { i } \\right\\}$ $T _ { x _ { 0 } } M$ $e _ { n } = \\frac { \\sigma _ { 0 } ^ { \\prime } } { | \\sigma _ { 0 } ^ { \\prime } | }$ , and parallel transport along  to get an orthonormal basis $\\{ e _ { i } ( s ) \\}$ at each point $\\sigma _ { 0 } ( s )$ ). Since $\\sigma _ { 0 } ^ { \\prime }$ is parallel along $\\sigma _ { 0 }$ we have that $\\textstyle e _ { n } ( s ) =$ ′ (s ) $\\frac { \\sigma _ { 0 } ^ { \\prime } ( s ) } { | \\sigma _ { 0 } ^ { \\prime } ( s ) | }$ for each s. ",
+        "bbox": [
+            220,
+            562,
+            783,
+            662
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "0 The first variation formula (7) yields the following: Since $\\sigma _ { 0 }$ is a maximum point of L˜ , we have for any smooth variation ",
+        "bbox": [
+            220,
+            662,
+            783,
+            689
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\begin{array}{l} 0 = \\frac {d}{d r} L [ \\sigma (., r) ] \\big | _ {r = 0} \\\\ = D _ {\\sigma_ {r} (1)} u - D _ {\\sigma_ {r} (0)} u - \\omega_ {\\varepsilon} ^ {\\prime} \\left(g _ {y _ {0}} \\left(e _ {n} (1), \\sigma_ {r} (1)\\right) + g _ {x _ {0}} \\left(e _ {n} (0), \\sigma_ {r} (0)\\right)\\right), \\\\ \\end{array}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            270,
+            697,
+            734,
+            749
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "page_number",
+        "text": "12 ",
+        "bbox": [
+            223,
+            90,
+            240,
+            99
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "and therefore since we can choose variations with arbitrary $\\sigma _ { r } ( 0 )$ and $\\sigma _ { r } ( 1 )$ we must have ",
+        "bbox": [
+            220,
+            112,
+            783,
+            140
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "equation",
+        "text": "$$\nD u (y _ {0}, t _ {0}) = \\omega_ {\\varepsilon} ^ {\\prime} e _ {n} (1); \\quad \\text { and } \\quad D u (x _ {0}, t _ {0}) = \\omega_ {\\varepsilon} ^ {\\prime} e _ {n} (0).\n$$",
+        "text_format": "latex",
+        "bbox": [
+            324,
+            142,
+            678,
+            158
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "It follows that the time derivative of $\\tilde { Z }$ at $\\left( x _ { 0 } , y _ { 0 } , t _ { 0 } \\right)$ satisfies (since $\\tilde { Z } ( \\sigma _ { 0 } , t )$ increases to zero as t increases to t0) ",
+        "bbox": [
+            220,
+            162,
+            783,
+            192
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\begin{array}{l} 0 \\leq \\frac {\\partial}{\\partial t} \\tilde {Z} [ \\sigma_ {0}, t _ {0} ] = a (\\omega_ {\\varepsilon} ^ {\\prime}) \\nabla_ {n} \\nabla_ {n} u (y _ {0}, t _ {0}) + b (\\omega_ {\\varepsilon} ^ {\\prime}) \\sum_ {i <   n} \\nabla_ {i} \\nabla_ {i} u (y _ {0}, t _ {0}) \\tag {9} \\\\ - a (\\omega_ {\\varepsilon} ^ {\\prime}) \\nabla_ {n} \\nabla_ {n} u (x _ {0}, t _ {0}) - b (\\omega_ {\\varepsilon} ^ {\\prime}) \\sum_ {i <   n} \\nabla_ {i} \\nabla_ {i} u (x _ {0}, t _ {0}) - 2 \\frac {\\partial \\omega_ {\\varepsilon}}{\\partial t}. \\\\ \\end{array}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            250,
+            202,
+            784,
+            269
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "To proceed we need to use the second variation formula (8) to obtain useful inequalities. Recall that in $\\mathbb { R } ^ { n }$ the variations which were useful were: Moving x and y apart along the line between them; and moving them both in parallel in an orthogonal direction. The first of these has an obvious analogue, in which x and y move apart along the geodesic $\\sigma _ { 0 } \\colon$ That is, $\\sigma ( s , r ) = \\sigma _ { 0 } ( s + ( 2 s - 1 ) r / L )$ . In this case, we have $L [ \\sigma ( . , r ) ] = L + 2 r$ , so we have $\\begin{array} { r } { \\frac { d } { d r } L [ \\sigma ( . , r ) ] = 2 } \\end{array}$ and $\\textstyle { \\frac { d ^ { 2 } } { d r ^ { 2 } } } L [ \\sigma ( . , r ) ] = 0$ . Then we have ",
+        "bbox": [
+            220,
+            279,
+            783,
+            370
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\geq \\frac {d ^ {2}}{d r ^ {2}} \\tilde {Z} [ \\sigma (., r), t _ {0} ] = \\nabla_ {n} \\nabla_ {n} u (y _ {0}, t _ {0}) - \\nabla_ {n} \\nabla_ {n} u (x _ {0}, t _ {0}) - 2 \\omega_ {\\varepsilon} ^ {\\prime \\prime} \\left(\\frac {d (x _ {0} , y _ {0})}{2}, t _ {0}\\right). \\tag {10}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            228,
+            380,
+            783,
+            413
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "The second kind of variation has an analogue in the Riemannian case constructed as follows: For each $i < n ,$ , define $\\sigma ( s , r ) = \\exp _ { \\sigma _ { 0 } ( s ) } \\left( r e _ { i } ( s ) \\right)$ ). Thus we have $\\sigma _ { r } ( s ) =$ $e _ { i } ( s )$ for each $s ,$ and $\\nabla _ { r } \\pmb { \\sigma } _ { r } = 0$ everywhere. The first variation formula (7) gives $\\begin{array} { r } { \\frac { d } { d r } L [ \\sigma ( . , r ) ] \\big | _ { r = 0 } = 0 } \\end{array}$ , and the second variation formula (8) gives ",
+        "bbox": [
+            221,
+            422,
+            783,
+            481
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\left. \\frac {d ^ {2}}{d r ^ {2}} L [ \\sigma (., r) ] \\right| _ {r = 0} = - \\frac {1}{L} \\int_ {0} ^ {1} R \\left(e _ {i}, L e _ {n}, e _ {i}, L e _ {n}\\right) d s = - L \\int_ {0} ^ {1} R _ {i n i n} d s.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            280,
+            491,
+            726,
+            521
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "This gives ",
+        "bbox": [
+            221,
+            531,
+            295,
+            544
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\geq \\frac {d ^ {2}}{d r ^ {2}} \\tilde {Z} [ \\sigma (., r), t _ {0} ] = \\nabla_ {i} \\nabla_ {i} u (y _ {0}, t _ {0}) - \\nabla_ {i} \\nabla_ {i} u (x _ {0}, t _ {0}) + \\omega_ {\\varepsilon} ^ {\\prime} L \\int_ {0} ^ {1} R _ {i n i n} d s.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            263,
+            555,
+            739,
+            586
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "Summing over $i = 1 , \\cdots , n - 1$ gives ",
+        "bbox": [
+            221,
+            595,
+            470,
+            609
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\geq \\sum_ {i <   n} \\nabla_ {i} \\nabla_ {i} u (y _ {0}, t _ {0}) - \\sum_ {i <   n} \\nabla_ {i} \\nabla_ {i} u (x _ {0}, t _ {0}) + \\omega_ {\\varepsilon} ^ {\\prime} L \\int_ {0} ^ {1} \\operatorname{Rc} (e _ {n}, e _ {n}) d s\n$$",
+        "text_format": "latex",
+        "bbox": [
+            290,
+            619,
+            715,
+            652
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\geq \\sum_ {i <   n} \\nabla_ {i} \\nabla_ {i} u (y _ {0}, t _ {0}) - \\sum_ {i <   n} \\nabla_ {i} \\nabla_ {i} u (x _ {0}, t _ {0}), \\tag {11}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            305,
+            655,
+            784,
+            681
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "since M has non-negative Ricci curvature. Combining (10) and (11) gives ",
+        "bbox": [
+            221,
+            690,
+            719,
+            706
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\begin{array}{l} 0 \\geq a \\left(\\omega_ {\\varepsilon} ^ {\\prime}\\right) \\left(\\nabla_ {n} \\nabla_ {n} u \\left(y _ {0}, t _ {0}\\right) - \\nabla_ {n} \\nabla_ {n} u \\left(x _ {0}, t _ {0}\\right) - 2 \\omega_ {\\varepsilon} ^ {\\prime \\prime}\\right) \\\\ + b \\left(\\omega_ {\\varepsilon} ^ {\\prime}\\right) \\left(\\nabla_ {i} \\nabla_ {i} u \\left(y _ {0}, t _ {0}\\right) - \\nabla_ {i} \\nabla_ {i} u \\left(x _ {0}, t _ {0}\\right)\\right). \\\\ \\end{array}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            332,
+            715,
+            670,
+            750
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "page_number",
+        "text": "13 ",
+        "bbox": [
+            766,
+            90,
+            783,
+            99
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "Combining this with (9) we deduce that ",
+        "bbox": [
+            221,
+            112,
+            492,
+            127
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\frac {\\partial \\omega_ {\\varepsilon}}{\\partial t} \\leq a (\\omega_ {\\varepsilon} ^ {\\prime}) \\omega_ {\\varepsilon} ^ {\\prime \\prime},\n$$",
+        "text_format": "latex",
+        "bbox": [
+            440,
+            137,
+            564,
+            167
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "which contradicts our assumption. Therefore we must conclude that Z remains negative, and letting  approach zero we have the claimed result. ",
+        "bbox": [
+            220,
+            175,
+            783,
+            204
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "In the case of the heat equation, we can evolve the modulus of continuity by the one-dimensional heat equation (1), and in particular we deduce the same lower bound on the first eigenvalue as was obtained previously in the Euclidean setting: ",
+        "bbox": [
+            220,
+            215,
+            783,
+            258
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "Theorem 2. Let $( M , g )$ be a compact Riemannian manifold (with convex or nonempty boundary), with non-negative Ricci curvature and diameter D. Then $\\lambda _ { 1 } ^ { N } ( M ) \\geq$ $\\textstyle { \\frac { \\pi ^ { 2 } } { D ^ { 2 } } }$ . ",
+        "bbox": [
+            221,
+            268,
+            784,
+            317
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "Notes: This result was first proved by Zhong and Yang [36] using gradient estimate for the eigenfunction equation, refining previous argument of Li [24] and Li-Yau [25]. The argument given here first appeared in [5], where the argument also produces a sharp estimate on the modulus of continuity (and a sharp lower bound for the first eigenvalue) in terms of diameter, given any lower bound on Ricci curvature — this gives a simple proof of results in [22, 11, 17, 16]. There is also a version which holds on Bakry-Emery spaces, which appeared in [8]. ",
+        "bbox": [
+            220,
+            324,
+            783,
+            423
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "In the proof the solution was assumed to be smooth, but in fact it suffices to consider viscosity solutions. In particular one can apply the result without difficulty for equations such as the p-Laplacian heat flows which are not uniformly parabolic (see [26], [9]). ",
+        "bbox": [
+            220,
+            424,
+            783,
+            481
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "2.3 Nonlinear eigenvalues ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            517,
+            442,
+            533
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "We mention here how the argument can be used to obtain lower bounds on $p \\mathrm { - }$ eigenvalues, at least in the case $p \\leq 2$ . The first $p \\mathrm { . }$ -eigenvalue is defined by ",
+        "bbox": [
+            220,
+            552,
+            783,
+            580
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\lambda_ {1, p} (M) = \\inf \\left\\{\\int_ {M} | D f | ^ {p}: \\int_ {M} | f | ^ {p} = 1, \\int_ {M} | f | ^ {p - 2} f = 0 \\right\\}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            300,
+            590,
+            702,
+            621
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "The minimizer is a solution of the nonlinear eigenvalue problem ",
+        "bbox": [
+            221,
+            631,
+            657,
+            645
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 = \\Delta_ {p} u + \\lambda_ {1, p} (M) | u | ^ {p - 2} u, \\tag {12}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            406,
+            655,
+            784,
+            671
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "with Neumann boundary condition $D _ { \\nu } u = 0$ if the boundary is non-empty, where $\\Delta _ { p } f = \\nabla _ { i } \\left( g ^ { i j } | D f | ^ { p - 2 } D _ { j } f \\right)$ is the $p { \\mathrm { - } } \\mathrm { I }$ Laplacian. Unfortunately, the obvious corresponding flow, the p-Laplacian heat equation, does not interact well with the $p \\mathrm { - }$ Laplacian heat equation, and instead we have to consider the more nonlinear heat flow (sometimes called the ‘Trudinger equation’) given by ",
+        "bbox": [
+            220,
+            683,
+            783,
+            753
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "page_number",
+        "text": "14 ",
+        "bbox": [
+            223,
+            90,
+            240,
+            99
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\left| u _ {t} \\right| ^ {p - 2} u _ {t} = \\Delta_ {p} u,\n$$",
+        "text_format": "latex",
+        "bbox": [
+            445,
+            112,
+            559,
+            129
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "or equivalently ",
+        "bbox": [
+            221,
+            140,
+            327,
+            154
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "equation",
+        "text": "$$\nu _ {t} = \\left| \\Delta_ {p} u \\right| ^ {- \\frac {p - 2}{p - 1}} \\Delta_ {p} u. \\tag {13}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            430,
+            153,
+            784,
+            175
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "This corresponds to the Lp-steepest descent flow for the $L ^ { p }$ Dirichlet energy $\\int _ { M } | D u | ^ { p }$ $\\operatorname { I f } f$ is a solution of (12), then $u ( x , t ) = \\mathbf { e } ^ { - \\lambda ^ { 1 / ( p - 1 ) } t } f ( x )$ is a solution to the flow (13), and in order to find a lower bound on  it suffices to prove exponential decay of the solution to (13). ",
+        "bbox": [
+            220,
+            180,
+            786,
+            239
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "The argument to do this is similar to that we used previously: If we set $Z ( x , y , t ) =$ $\\begin{array} { r } { u ( y , t ) - u ( x , t ) - 2 \\omega \\left( \\frac { d ( x , y ) } { 2 } , t \\right) } \\end{array}$ , then at point where Z first reaches zero (which must be of the form $\\left( x _ { 0 } , y _ { 0 } , t _ { 0 } \\right)$ with $x _ { 0 }$ and $y _ { 0 }$ interior points of $M ,$ and $t _ { 0 } ,$ by the same argument as before if M has convex boundary), then we have the identity $D u ( y ) =$ $\\omega ^ { \\prime } e _ { n } ( 1 )$ and $D u ( x ) = \\omega ^ { \\prime } e _ { n } ( 0 )$ , and the inequalities (11) and (10), so that we have ",
+        "bbox": [
+            220,
+            241,
+            783,
+            319
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\Delta_ {p} u (y) - \\Delta_ {p} u (x) \\leq 2 (\\boldsymbol {\\omega} ^ {\\prime}) ^ {p - 2} \\boldsymbol {\\omega} ^ {\\prime \\prime}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            389,
+            328,
+            615,
+            347
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "Note that $\\omega ^ { \\prime \\prime } < 0$ , so this can be rephrased as saying that ",
+        "bbox": [
+            221,
+            356,
+            606,
+            370
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\Delta_ {p} u (x) \\geq \\Delta_ {p} u (y) + \\delta\n$$",
+        "text_format": "latex",
+        "bbox": [
+            426,
+            381,
+            578,
+            399
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "where $\\delta = - 2 ( \\omega ^ { \\prime } ) ^ { p - 2 } \\omega ^ { \\prime \\prime } > 0$ . Now if $p \\leq 2$ , then the function $\\phi : z \\mapsto | z | ^ { - \\frac { p - 2 } { p - 1 } } z$ 2-2 is convex for positive z and odd, so we can conclude that $\\phi ( b + \\delta ) - \\phi ( b ) \\geq 2 \\phi ( \\delta / 2 )$ for any b. This implies that ",
+        "bbox": [
+            220,
+            410,
+            783,
+            456
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\phi \\left(\\Delta_ {p} u (x)\\right) \\geq \\phi \\left(\\Delta_ {p} u (y)\\right) ^ {1 / (p - 1)} + 2 \\phi \\left(\\frac {\\left(\\boldsymbol {\\omega} ^ {\\prime}\\right) ^ {p - 2} \\boldsymbol {\\omega} ^ {\\prime \\prime}}{2}\\right),\n$$",
+        "text_format": "latex",
+        "bbox": [
+            319,
+            466,
+            684,
+            499
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "which is equivalent to ",
+        "bbox": [
+            221,
+            508,
+            374,
+            521
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\partial_ {t} u (y) - \\partial_ {t} u (x) \\leq 2 \\phi \\left(\\frac {(\\omega^ {\\prime}) ^ {p - 2} \\omega^ {\\prime \\prime}}{2}\\right),\n$$",
+        "text_format": "latex",
+        "bbox": [
+            373,
+            532,
+            631,
+            565
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "On the other hand since $\\partial _ { t } Z \\ge 0$ we have ",
+        "bbox": [
+            221,
+            575,
+            500,
+            589
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\partial_ {t} u (y) - \\partial_ {t} u (x) \\geq 2 \\omega_ {t},\n$$",
+        "text_format": "latex",
+        "bbox": [
+            423,
+            601,
+            581,
+            615
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "and we derive a contradiction as before if $\\omega _ { t } > \\phi ( \\varDelta _ { p } \\omega )$ . This allows us to use the one-dimensional p-eigenfunction for , yielding the sharp inequality ",
+        "bbox": [
+            220,
+            627,
+            783,
+            656
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\lambda_ {1, p} (M) \\geq \\lambda_ {1, p} [ - D / 2, D / 2 ].\n$$",
+        "text_format": "latex",
+        "bbox": [
+            403,
+            667,
+            601,
+            684
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "provided the Ricci curvature of M is non-negative. This result was proved previously (for any $p > 1 )$ by Valtorta [34] using gradient estimates for the eigenfunction equation, and the special case of convex domains in Euclidean space was proved independently in [18]. The result for arbitrary lower bounds on the Ricci curvature was proved by Naber and Valtorta [28], and this can also be recovered using the modulus of continuity argument in the case $p \\leq 2$ . ",
+        "bbox": [
+            220,
+            694,
+            783,
+            750
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "page_number",
+        "text": "15 ",
+        "bbox": [
+            766,
+            90,
+            783,
+            99
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            220,
+            112,
+            783,
+            142
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "text",
+        "text": "Lecture 3: Log-concavity and the fundamental gap ",
+        "text_level": 1,
+        "bbox": [
+            220,
+            179,
+            662,
+            195
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "text",
+        "text": "3.1 The fundamental gap conjecture ",
+        "text_level": 1,
+        "bbox": [
+            220,
+            214,
+            527,
+            231
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "text",
+        "text": "In this lecture we will discuss the proof of the fundamental gap conjecture, which uses the modulus of continuity argument as well as some other ingredients. The setting is as follows: Given a compact Riemannian manifold M (maybe with boundary), we can consider the sequence of eigenfunctions of the Laplacian (for now, let’s say with Dirichlet boundary conditions), and perhaps also incorporating a potential: ",
+        "bbox": [
+            218,
+            249,
+            783,
+            319
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\Delta u _ {i} - V u _ {i} + \\lambda_ {i} u _ {i} = 0 \\quad \\text { on } M;\n$$",
+        "text_format": "latex",
+        "bbox": [
+            396,
+            331,
+            601,
+            346
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "equation",
+        "text": "$$\nu = 0 \\quad \\text { on } \\partial M,\n$$",
+        "text_format": "latex",
+        "bbox": [
+            500,
+            350,
+            608,
+            363
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "text",
+        "text": "where V is a (smooth) function on M. We have a sequence of eigenfunctions $\\left\\{ u _ { i } \\right\\}$ forming an orthonormal basis for $L ^ { 2 } ( M )$ , with eigenvalues $\\lambda _ { 0 } < \\lambda _ { 1 } \\leq \\lambda _ { 2 } \\dotsb  \\infty$ . The first eigenfunction is unique (up to scaling), and is the unique eigenfunction with a sign (which we can take to be positive). This is called the ground state. Since it is unique, there is a strict inequality between the ground state eigenvalue (or ground state energy) $\\lambda _ { 0 }$ and the next $\\lambda _ { 1 }$ (the energy of the first excited state). This difference is called the fundamental gap, and is a reflection of the stability of the ground state. We will denote this by ${ \\cal T } _ { V } ( M ) = \\lambda _ { 1 } ( M ) - \\lambda _ { 0 } ( M )$ ). ",
+        "bbox": [
+            218,
+            375,
+            783,
+            488
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "text",
+        "text": "Note that in the case of Neumann boundary (and $V = 0 )$ the first eigenfunction is a constant, and $\\lambda _ { 0 } = 0$ , so the fundamental gap coincides with the first non-trivial eigenvalue which we estimated in the first lecture, with the sharp lower bound on a convex Euclidean domain provided by the Payne-Weinberger inequality $T ( \\varOmega ) \\geq$ $\\textstyle { \\frac { \\pi ^ { 2 } } { D ^ { 2 } } }$ , where $D = \\mathrm { d i a m } ( \\varOmega )$ . ",
+        "bbox": [
+            220,
+            489,
+            783,
+            563
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "text",
+        "text": "The corresponding conjecture for the Dirichlet case is the so-called fundamental gap conjecture, made independently by van den Berg [12], Yau [32] and Ashbaugh-Benguria [10]: ",
+        "bbox": [
+            220,
+            563,
+            783,
+            605
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "text",
+        "text": "Conjecture 1. If $\\varOmega$ is a bounded convex domain in $\\mathbb { R } ^ { n }$ , and V is a convex function on $\\Omega _ { ; }$ , then $\\begin{array} { r } { T _ { V } ( \\Omega ) \\geq \\frac { 3 \\pi ^ { 2 } } { D ^ { 2 } } } \\end{array}$ 3 2 , where $D = \\mathrm { d i a m } ( \\varOmega )$ . ",
+        "bbox": [
+            220,
+            615,
+            783,
+            649
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "text",
+        "text": "I proved this with Julie Clutterbuck in 2011 [4]. Today I will explain the ideas of our proof, but first I will digress briefly to discuss the one-dimensional case, which was proved much earlier by Lavine [23]. ",
+        "bbox": [
+            220,
+            657,
+            783,
+            700
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "page_number",
+        "text": "16 ",
+        "bbox": [
+            223,
+            90,
+            240,
+            99
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 15
+    },
+    {
+        "type": "text",
+        "text": "3.2 The 1D case ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            112,
+            359,
+            126
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "text",
+        "text": "In the one-dimensional case, the Sturm comparison theorem implies that each eigenspace of the Laplacian is one-dimensional, so that we have strict inequalities $\\lambda _ { i } < \\lambda _ { i + 1 }$ for $i = 0 , 1 , \\cdots$ . In this situation the eigenfunctions and eigenvalues depend smoothly on the potential V , and we can compute the derivatives of these functions in a standard way: If we consider a smooth variation of the potential, so that $V ( s , \\varepsilon )$ is smooth on $\\left[ - D / 2 , D / 2 \\right] \\times I$ for some interval I about the origin, write $\\begin{array} { r } { \\dot { V } = \\frac { \\partial \\dot { V } } { \\partial \\varepsilon } } \\end{array}$ (more generally, we will denote derivatives with respect to  with dots). Then differentiating the eigenfunction equation $u _ { i } ^ { \\prime \\prime } - V u _ { i } + \\lambda _ { i } u _ { i } = 0$ gives ",
+        "bbox": [
+            220,
+            147,
+            783,
+            261
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 = \\dot {u} _ {i} ^ {\\prime \\prime} - V \\dot {u} _ {i} + \\lambda_ {i} \\dot {u} _ {i} + (\\dot {\\lambda} _ {i} - \\dot {V}) u _ {i}. \\tag {14}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            389,
+            272,
+            784,
+            288
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "text",
+        "text": "Differentiating the boundary condition also gives $\\dot { u } _ { i } = 0$ at the endpoints, if $u _ { i }$ is a Dirichlet eigenfunction. Multiplying (14) by $u _ { i }$ and integrating by parts, and applying the eigenfunction equation, then yields ",
+        "bbox": [
+            220,
+            300,
+            783,
+            342
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 = \\int_ {- D / 2} ^ {D / 2} (\\dot {\\lambda} _ {i} - \\dot {V} _ {i}) u _ {i} ^ {2} d s,\n$$",
+        "text_format": "latex",
+        "bbox": [
+            416,
+            353,
+            588,
+            385
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "text",
+        "text": "or equivalently ",
+        "bbox": [
+            221,
+            394,
+            327,
+            409
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\dot {\\lambda} _ {i} = \\frac {\\int \\dot {V} u _ {i} ^ {2} d s}{\\int u _ {i} ^ {2} d s}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            450,
+            407,
+            554,
+            439
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "text",
+        "text": "If we assume that the eigenfunctions form an orthonormal basis in $L ^ { 2 }$ , then we have $\\textstyle \\int u _ { i } ^ { 2 } d s = 1$ , and the denominator can be removed. This gives the following formula for the change in the gap under a smooth change in potential: ",
+        "bbox": [
+            221,
+            445,
+            783,
+            489
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\dot {\\Gamma} = \\int \\dot {V} (u _ {1} ^ {2} - u _ {0} ^ {2}) d s.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            426,
+            500,
+            578,
+            527
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "text",
+        "text": "Lavine’s argument is based on the following observation: Given a potential V which is convex on $\\left[ - D / 2 , D / 2 \\right]$ , consider the family of potentials $\\{ V + a s : a \\in \\mathbb { R } \\}$ . Some simple asymptotics guarantee that the fundamental gap is a proper function of a, so there exists a value ¯a where the gap is minimized. We might call the gap $\\tilde { \\cal I _ { V } } = { \\cal I _ { V + \\bar { a } s } }$ the linear family gap of V . Note that at $V + \\bar { a } s$ we have ",
+        "bbox": [
+            220,
+            535,
+            783,
+            606
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 = \\frac {d}{d a} \\Gamma = \\int s (u _ {1} ^ {2} - u _ {0} ^ {2}) d s.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            403,
+            617,
+            601,
+            646
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "text",
+        "text": "Since the eigenfunctions are normalised, we also have $\\textstyle { \\int ( u _ { 1 } ^ { 2 } - u _ { 0 } ^ { 2 } ) d s = 0 }$ . Combining these two identities, we discover that the function ",
+        "bbox": [
+            220,
+            655,
+            783,
+            683
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\psi (s) = \\int_ {- D / 2} ^ {s} \\int_ {- D / 2} ^ {s ^ {\\prime}} \\left(u _ {1} \\left(s ^ {\\prime \\prime}\\right) ^ {2} - u _ {0} \\left(s ^ {\\prime \\prime}\\right) ^ {2}\\right) d s ^ {\\prime \\prime} d s ^ {\\prime} = \\int_ {- D / 2} ^ {s} \\left(s - s ^ {\\prime}\\right) \\left(u _ {1} \\left(s ^ {\\prime}\\right) ^ {2} - u _ {0} \\left(s ^ {\\prime}\\right) ^ {2}\\right) d s ^ {\\prime}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            221,
+            694,
+            791,
+            728
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "page_number",
+        "text": "17 ",
+        "bbox": [
+            766,
+            90,
+            783,
+            99
+        ],
+        "page_idx": 16
+    },
+    {
+        "type": "text",
+        "text": "satisfies $\\psi ^ { \\prime \\prime } = u _ { 1 } ^ { 2 } - u _ { 0 } ^ { 2 } .$ , and $\\psi ( \\pm D / 2 ) = \\psi ^ { \\prime } ( \\pm D / 2 ) = 0$ . We also know that $u _ { 1 } ^ { 2 } - u _ { 0 } ^ { 2 }$ has exactly two zeroes (it cannot have more than two since $u _ { 1 } / u _ { 0 }$ is monotone, and it cannot have less than two since it is orthogonal to any linear function. It follows that $u _ { 1 } ^ { 2 } - u _ { 0 } ^ { 2 }$ is positive in a neighbourhood of each endpoint $\\pm D / 2$ , and negative on an interval in between, and this in turn implies that is a positive function. ",
+        "bbox": [
+            220,
+            112,
+            783,
+            185
+        ],
+        "page_idx": 17
+    },
+    {
+        "type": "text",
+        "text": "We can now prove that the linear family gap is monotone with respect to convexity of the potential: That is, if $V _ { 2 } - V _ { 1 }$ is a convex function, then $\\tilde { { \\cal I } _ { V _ { 2 } } } \\geq \\tilde { { \\cal I } _ { V _ { 1 } } }$ . This follows since $\\tilde { \\cal I } _ { ( 1 - t ) V _ { 1 } + t V _ { 2 } } \\leq { \\cal I } _ { ( 1 - t ) V _ { 1 } + t V _ { 2 } + \\bar { a } s } .$ , if ¯a is chosen so that equality holds at $t = 0$ . Then ",
+        "bbox": [
+            220,
+            185,
+            784,
+            241
+        ],
+        "page_idx": 17
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\begin{array}{l} \\frac {d}{d t} \\Gamma_ {(1 - t) V _ {1}) + t V _ {2}} | _ {t = 0} = \\int (V _ {2} - V _ {1}) \\left(u _ {1} ^ {2} - u _ {0} ^ {2}\\right) d s \\\\ = \\int \\left(V _ {2} - V _ {1}\\right) \\psi^ {\\prime \\prime} d s \\\\ = \\int \\left(V _ {2} - V _ {1}\\right) ^ {\\prime \\prime} \\psi \\geq 0 \\\\ \\end{array}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            351,
+            249,
+            655,
+            335
+        ],
+        "page_idx": 17
+    },
+    {
+        "type": "text",
+        "text": "and the inequality is strict unless $V _ { 2 } - V _ { 1 }$ is linear, so the same inequality holds for $\\tilde { \\cal { \\cal T } }$ . ",
+        "bbox": [
+            220,
+            343,
+            783,
+            370
+        ],
+        "page_idx": 17
+    },
+    {
+        "type": "text",
+        "text": "It follows that if V is convex, then $T _ { V } \\ge \\tilde { { \\cal I } _ { V } } \\ge \\tilde { { \\cal I } _ { 0 } }$ . It remains to prove that $\\tilde { { \\cal I } _ { 0 } } =$ $\\begin{array} { r } { T _ { 0 } = \\frac { 3 \\pi ^ { 2 } } { D ^ { 2 } } } \\end{array}$ D2 . That is, the fundamental gap problem for arbitrary convex potentials is reduced to proving that $\\varGamma _ { a x } \\geq \\varGamma _ { 0 }$ for every $^ { a , }$ which amounts to some analysis of Airy functions. Lavine proves this using an integral identity which implies that the only critical point of the function $a \\mapsto T _ { a x }$ occurs at $a = 0 ,$ . ",
+        "bbox": [
+            220,
+            370,
+            784,
+            445
+        ],
+        "page_idx": 17
+    },
+    {
+        "type": "text",
+        "text": "It is interesting to note that the monotonicity of the linear family gap with respect to convexity of the potential also holds for other boundary conditions such as Neumann and Robin conditions. Lavine also proved the last step, that the linear family gap of the zero potential equals the gap of the zero potential, for the Neumann case, and a modification of the argument also gives the corresponding result for Robin problems with positive Robin constant. Therefore, in the one-dimensional case, the natural analogue of the fundamental gap conjecture holds in all of these cases. ",
+        "bbox": [
+            220,
+            445,
+            783,
+            544
+        ],
+        "page_idx": 17
+    },
+    {
+        "type": "text",
+        "text": "3.3 Converting to a Neumann problem ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            581,
+            542,
+            596
+        ],
+        "page_idx": 17
+    },
+    {
+        "type": "text",
+        "text": "In higher dimensions, we must argue quite differently. Here we will show how the techniques from the last two lectures, controlling the modulus of continuity for heat equations, can be applied here to control the fundamental gap. In those sections, sharp results were obtained for Neumann boundary conditions, and the starting point of our approach is an idea from [32] which converts the Dirichlet boundary condition to a Neumann condition, at the expense of introducing a ‘drift’ term into the equation: ",
+        "bbox": [
+            218,
+            615,
+            783,
+            714
+        ],
+        "page_idx": 17
+    },
+    {
+        "type": "text",
+        "text": "Suppose that we have two solutions of the Dirichlet heat equation (with potential) on a smoothly bounded domain in $\\mathbb { R } ^ { n }$ : ",
+        "bbox": [
+            220,
+            715,
+            783,
+            743
+        ],
+        "page_idx": 17
+    },
+    {
+        "type": "page_number",
+        "text": "18 ",
+        "bbox": [
+            223,
+            90,
+            240,
+            99
+        ],
+        "page_idx": 17
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 17
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\partial_ {t} u _ {i} = \\Delta u _ {i} - V u _ {i} \\quad \\text { on } \\Omega \\times \\mathbb {R} _ {+};\n$$",
+        "text_format": "latex",
+        "bbox": [
+            389,
+            112,
+            603,
+            128
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "equation",
+        "text": "$$\nu _ {i} = 0 \\quad \\text { on } \\partial \\Omega \\times \\mathbb {R} _ {+},\n$$",
+        "text_format": "latex",
+        "bbox": [
+            462,
+            131,
+            613,
+            146
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "text",
+        "text": "for $i = 0 , 1$ , where $u _ { 0 }$ is positive. Then define $\\begin{array} { r } { \\nu = \\frac { u _ { 1 } } { u _ { 0 } } } \\end{array}$ u0 . Then we have the equation ",
+        "bbox": [
+            220,
+            156,
+            764,
+            175
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\partial_ {t} v = \\Delta v + 2 D \\log u _ {0} \\cdot D v \\quad \\text { on } \\Omega \\times \\mathbb {R} _ {+} \\tag {15}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            361,
+            186,
+            784,
+            200
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "equation",
+        "text": "$$\nD _ {v} v = 0 \\quad \\text { on } \\partial \\Omega \\times \\mathbb {R} _ {+}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            473,
+            204,
+            643,
+            219
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "text",
+        "text": "To verify the boundary condition, fix any $x \\in \\partial \\Omega$ , and choose an orthonormal basis $\\left\\{ \\boldsymbol { e } _ { k } \\right\\}$ for $\\mathbb { R } ^ { n }$ with $e _ { n }$ equal to the inward unit normal to at x. Since $u _ { i } ( x , t ) = 0$ for all t by the Dirichlet condition, we have $0 = \\partial _ { t } u _ { i } ( x , t ) = \\varDelta u _ { i } ( x , t ) -$ $V ( x ) u _ { i } ( x , t ) = \\varDelta u _ { i } ( x , t )$ . Also, differentiating along a geodesic $\\gamma _ { k } ( s ) = x + s e _ { k } +$ ${ \\textstyle \\frac { 1 } { 2 } } s ^ { 2 } h ( e _ { k } , e _ { k } ) e _ { n } + o ( \\bar { s } ^ { 2 } )$ for $k = 1 , \\cdots , n - 1$ , we have $0 = u _ { i } ( \\gamma _ { k } ( s ) )$ for all $s ,$ and 2so $\\begin{array} { r } { 0 = \\frac { d } { d s } u _ { i } ( \\gamma _ { k } ( s ) ) \\big | _ { s = 0 } = D u _ { i } ( \\gamma ^ { \\prime } ) = D _ { k } u _ { i } . } \\end{array}$ , and $\\begin{array} { r } { 0 = \\frac { d ^ { 2 } } { d s ^ { 2 } } u _ { i } ( \\gamma _ { k } ( s ) ) \\big | _ { s = 0 } = D _ { k } D _ { k } u _ { i } ( { \\boldsymbol { x } } ) + } \\end{array}$ $h _ { k k } D _ { n } u _ { i } ( x )$ . Taking the trace gives $\\begin{array} { r } { \\sum _ { k = 1 } ^ { n - 1 } D _ { k } D _ { k } u _ { i } ( x ) = - H ( x ) D _ { n } u _ { i } ( x ) } \\end{array}$ , and therefore $\\begin{array} { r } { D _ { n } D _ { n } u _ { i } ( x ) = A u _ { i } ( x ) - \\sum _ { k = 1 } ^ { n - 1 } D _ { k } D _ { k } u _ { i } ( x ) = H D _ { n } u _ { i } ( x ) } \\end{array}$ , where $H ( x )$ is the mean curvature of the boundary  at x. This gives ",
+        "bbox": [
+            220,
+            230,
+            783,
+            366
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "equation",
+        "text": "$$\nu _ {i} (x + s e _ {n}) = s D _ {n} u _ {i} (x) + \\frac {1}{2} s ^ {2} D _ {n} D _ {n} u _ {i} (x) + o \\left(s ^ {2}\\right) = D _ {n} u _ {i} (x) \\left(s + \\frac {1}{2} H s ^ {2}\\right) + o \\left(s ^ {2}\\right).\n$$",
+        "text_format": "latex",
+        "bbox": [
+            236,
+            376,
+            766,
+            404
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "text",
+        "text": "From this we get ",
+        "bbox": [
+            221,
+            413,
+            339,
+            426
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "equation",
+        "text": "$$\nv (x + s e _ {n}) = \\frac {D _ {n} u _ {1} (x)}{D _ {n} u _ {0} (x)} + o (s)\n$$",
+        "text_format": "latex",
+        "bbox": [
+            403,
+            426,
+            601,
+            456
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "text",
+        "text": "as $s \\to 0 ,$ , and therefore $D _ { \\nu } \\nu ( x ) = 0$ (note that $D _ { n } u _ { 0 } ( x ) > 0$ by the Hopf Lemma). ",
+        "bbox": [
+            220,
+            461,
+            766,
+            475
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "text",
+        "text": "Thus the function v satisfies a Neumann heat equation with drift. What is more, there is a special solution which we can produce by choosing $u _ { i } ( x , t ) = u _ { i } ( x ) \\mathbf { e } ^ { - \\lambda _ { i } t }$ , which gives ",
+        "bbox": [
+            220,
+            476,
+            783,
+            517
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "equation",
+        "text": "$$\nv (x, t) = \\frac {u _ {1} (x)}{u _ {0} (x)} \\mathrm{e} ^ {- (\\lambda_ {1} - \\lambda_ {0}) t},\n$$",
+        "text_format": "latex",
+        "bbox": [
+            413,
+            518,
+            589,
+            546
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "text",
+        "text": "so that we see the fundamental gap appearing as the exponential decay rate. If we can show that this exponential rate is sufficiently fast (as we did for the Neumann heat equation in the first lecture) then we will have a lower bound for the fundamental gap. ",
+        "bbox": [
+            218,
+            552,
+            783,
+            608
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "text",
+        "text": "Let’s try to do this: Suppose we have a solution of the heat equation with drift (15), and set $\\begin{array} { r } { Z ( x , y , t ) = \\nu ( y , t ) - \\nu ( x , t ) - 2 \\varphi \\left( \\frac { | y - x | } { 2 } , t \\right) } \\end{array}$ , in direct analogy to our method for the usual heat equation. We proceed exactly as before, considering points $\\left( x _ { 0 } , y _ { 0 } , t _ { 0 } \\right)$ where Z increases to zero for the first time. The case where $x _ { 0 }$ or y is in $\\partial \\varOmega$ can be handled exactly as before, and in the case where both are interior points of , and we choose an orthonormal basis for $\\mathbb { R } ^ { n }$ with $\\begin{array} { r } { e _ { n } = \\frac { y _ { 0 } - x _ { 0 } } { | y _ { 0 } - x _ { 0 } | } } \\end{array}$ we derive the inequalities ",
+        "bbox": [
+            220,
+            609,
+            783,
+            715
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\left. D _ {n} D _ {n} v \\right| _ {\\left(y _ {0}, t _ {0}\\right)} - \\left. D _ {n} D _ {n} v \\right| _ {\\left(x _ {0}, t _ {0}\\right)} \\leq 2 \\varphi^ {\\prime \\prime}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            381,
+            715,
+            623,
+            734
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "text",
+        "text": "and ",
+        "bbox": [
+            221,
+            739,
+            250,
+            751
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "page_number",
+        "text": "19 ",
+        "bbox": [
+            766,
+            90,
+            783,
+            99
+        ],
+        "page_idx": 18
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\left. D _ {i} D _ {i} v \\right| _ {\\left(y _ {0}, t _ {0}\\right)} - \\left. D _ {i} D _ {n} i \\right| _ {\\left(x _ {0}, t _ {0}\\right)} \\leq 0\n$$",
+        "text_format": "latex",
+        "bbox": [
+            396,
+            112,
+            608,
+            133
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "text",
+        "text": "for $i = 1 , \\cdots , n - 1$ . Adding these gives $\\left. \\Delta \\nu \\right| _ { ( y _ { 0 } , t _ { 0 } ) } - \\left. \\Delta \\nu \\right| _ { ( x _ { 0 } , t _ { 0 } ) } \\leq 2 \\varphi ^ { \\prime \\prime }$ . Also, the first derivative conditions at the maximum give $\\nabla \\nu ( y _ { 0 } , t _ { 0 } ) = \\nabla \\nu ( x _ { 0 } , t _ { 0 } ) = \\varphi ^ { \\prime } e _ { n }$ . Finally, the time derivative gives ",
+        "bbox": [
+            220,
+            137,
+            783,
+            185
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\begin{array}{l} 0 \\leq \\partial_ {t} v \\big | _ {(y _ {0}, t _ {0})} - \\partial_ {t} v \\big | _ {(x _ {0}, t _ {0})} - 2 \\varphi_ {t} \\\\ \\leq \\Delta v \\big | _ {(y _ {0}, t _ {0})} + 2 D \\log u _ {0} (y _ {0}) \\cdot D v (y _ {0}, t _ {0}) - \\Delta v \\big | _ {(x _ {0}, t _ {0})} - 2 D \\log u _ {0} (x _ {0}) \\cdot D v (x _ {0}, t _ {0}) - 2 \\varphi_ {t} \\\\ \\leq 2 \\varphi^ {\\prime \\prime} + 2 \\varphi^ {\\prime} (D \\log u _ {0} (y _ {0}) - D \\log u _ {0} (x _ {0})) \\cdot \\frac {y _ {0} - x _ {0}}{| y _ {0} - x _ {0} |} - 2 \\varphi_ {t}. \\tag {16} \\\\ \\end{array}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            220,
+            193,
+            793,
+            268
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "text",
+        "text": "This is exactly the same as we have before, except we have replaced u by v and we have the extra term $\\begin{array} { r } { 2 ( D \\log u _ { 0 } ( y _ { 0 } ) - D \\log u _ { 0 } ( x _ { 0 } ) ) \\cdot \\frac { y _ { 0 } - x _ { 0 } } { | y _ { 0 } - x _ { 0 } | } } \\end{array}$ . To proceed, we need to estimate this term from above, and we can do this using the following famous result: ",
+        "bbox": [
+            220,
+            275,
+            783,
+            321
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "text",
+        "text": "Theorem 3 (Brascamp-Lieb [13]). If V is convex, and  is convex, then log u0 is concave, where u0 is the Dirichlet ground state. ",
+        "bbox": [
+            220,
+            331,
+            783,
+            360
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "text",
+        "text": "The theorem implies that $\\begin{array} { r } { 2 ( D \\log u _ { 0 } ( y _ { 0 } ) - D \\log u _ { 0 } ( x _ { 0 } ) ) \\cdot \\frac { y _ { 0 } - x _ { 0 } } { | y _ { 0 } - x _ { 0 } | } \\le 0 , } \\end{array}$ , so we can 2 discard this term and proceed as before, choosing $\\begin{array} { r } { \\varphi ( x , t ) = C \\mathrm { e } ^ { - \\frac { \\pi ^ { \\sim } } { D ^ { 2 } } t } \\sin \\left( \\frac { \\pi x } { D } \\right) } \\end{array}$ . Applying this estimate to the special solution constructed above, we derive the inequality ",
+        "bbox": [
+            220,
+            369,
+            783,
+            424
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\lambda_ {1} - \\lambda_ {0} \\geq \\frac {\\pi^ {2}}{D ^ {2}}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            450,
+            432,
+            554,
+            463
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "text",
+        "text": "This is a nice result, proved previously using gradient estimates by Yu and Zhong [35], who improved an earlier result in [32] using essentially the same ideas that Zhong and Yang [36] used for the Neumann problem. However this bound on the gap is not sharp: The term we have thrown away using the result of Brascamp and Lieb is in fact strictly negative, so we are throwing away too much. In order to get a sharp result, we must derive a sharp improvement on the Brascamp-Lieb result. ",
+        "bbox": [
+            220,
+            472,
+            783,
+            557
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "text",
+        "text": "3.4 Sharp log-concavity ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            594,
+            421,
+            609
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "text",
+        "text": "How bad was our mistake in throwing away the negative term $2 ( D \\log u _ { 0 } ( y _ { 0 } ) -$ $\\begin{array} { r } { D \\log u _ { 0 } ( x _ { 0 } ) ) \\cdot \\frac { y _ { 0 } - x _ { 0 } } { | y _ { 0 } - x _ { 0 } | } ? } \\end{array}$ To answer this, we should think about the notional case of equality, which is an interval with zero potential. In this case, we have $u _ { 0 } ( x ) =$ $C \\mathbf { e } ^ { - \\frac { \\pi ^ { 2 } } { D ^ { 2 } } t } \\cos \\left( \\frac { \\pi x } { D } \\right)$ π2 , and so ). It follows that $\\begin{array} { r } { ( \\log u _ { 0 } ) ^ { \\prime } ( x ) = - \\frac { \\pi } { D } \\tan \\left( \\frac { \\pi x } { D } \\right) } \\end{array}$ ",
+        "bbox": [
+            220,
+            627,
+            783,
+            697
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\left(D \\log u _ {0} \\left(y _ {0}\\right) - D \\log u _ {0} \\left(x _ {0}\\right)\\right) \\cdot \\frac {y _ {0} - x _ {0}}{\\left| y _ {0} - x _ {0} \\right|} = \\left(\\log u _ {0}\\right) ^ {\\prime} (y) - \\left(\\log u _ {0}\\right) ^ {\\prime} (x) \\leq - \\frac {2 \\pi}{D} \\tan \\left(\\frac {\\pi x}{2 D}\\right),\n$$",
+        "text_format": "latex",
+        "bbox": [
+            221,
+            706,
+            800,
+            736
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "page_number",
+        "text": "20 ",
+        "bbox": [
+            223,
+            90,
+            240,
+            99
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 19
+    },
+    {
+        "type": "text",
+        "text": "with equality when $y = - x .$ . This motivates the following sharp log-concavity estimate: ",
+        "bbox": [
+            220,
+            112,
+            783,
+            142
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "text",
+        "text": "Proposition 4. Let $\\Omega \\subset \\mathbb { R } ^ { n }$ be a bounded convex domain, and V a convex potential on . Let $u _ { 0 }$ be the ground state of the Schrodinger operator ¨ $\\Delta - V$ on  with Dirichlet boundary condition. Let u¯0 be the ground state of the Dirichlet Laplacian on the interval $\\left[ - D / 2 , D / 2 \\right]$ where $D = \\mathrm { d i a m } ( \\varOmega )$ . Then ",
+        "bbox": [
+            220,
+            152,
+            783,
+            210
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\left(D \\log u _ {0} (y) - D \\log u _ {0} (x)\\right) \\cdot \\frac {y - x}{| y - x |} \\leq 2 \\left(\\log \\bar {u} _ {0}\\right) ^ {\\prime} \\left(\\frac {| y - x |}{2}\\right) \\tag {17}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            305,
+            219,
+            784,
+            252
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "text",
+        "text": "for all $y \\neq x$ in $\\Omega .$ ",
+        "bbox": [
+            218,
+            261,
+            346,
+            275
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "text",
+        "text": "Explicitly, this says that $( D \\log u _ { 0 } ( y )$ − Dlog $\\begin{array} { r } { u _ { 0 } ( x ) ) \\cdot \\frac { y - x } { | y - x | } \\le - \\frac { 2 \\pi } { D } } \\end{array}$ tan $\\left( { \\frac { \\pi x } { 2 D } } \\right)$ , as the calculation above shows. ",
+        "bbox": [
+            220,
+            284,
+            783,
+            313
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "text",
+        "text": "To prove the proposition, we follow the model of the modulus of continuity bound: Given a positive solution u of the Dirichlet heat equation with potential $V ,$ we define a function of two points and time by ",
+        "bbox": [
+            220,
+            316,
+            783,
+            357
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "equation",
+        "text": "$$\nQ (x, y, t) = \\left(D \\log u (y, t) - D \\log u (x, t)\\right) \\cdot \\frac {y - x}{| y - x |} - 2 \\psi \\left(\\frac {| y - x |}{2}, t\\right),\n$$",
+        "text_format": "latex",
+        "bbox": [
+            275,
+            368,
+            729,
+            401
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "text",
+        "text": "where  will be chosen to make $Q < 0$ at $t = 0$ and to evolve according to an equation that we will derive below. In order to compute the time derivative of $Q$ we first compute the evolution equation for $w = \\log { u } ;$ ",
+        "bbox": [
+            220,
+            409,
+            783,
+            451
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\partial_ {t} w = \\frac {1}{u} (\\Delta u - V u) = \\Delta w + | D w | ^ {2} - V.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            366,
+            462,
+            636,
+            489
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "text",
+        "text": "Differentiating, we find ",
+        "bbox": [
+            221,
+            499,
+            384,
+            512
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\partial_ {t} w _ {i} = \\Delta w _ {i} + 2 w _ {k} w _ {k i} - V _ {i},\n$$",
+        "text_format": "latex",
+        "bbox": [
+            411,
+            524,
+            593,
+            539
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "text",
+        "text": "where we use subscripts for derivatives for convenience of notation. This gives ",
+        "bbox": [
+            220,
+            551,
+            752,
+            565
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\begin{array}{l} \\partial_ {t} Q = (\\Delta w _ {i} (y) - \\Delta w _ {i} (x)) \\frac {y ^ {i} - x ^ {i}}{| y - x |} \\\\ + 2 \\left(w _ {k} (y) w _ {k i} (y) - w _ {k} (x) w _ {k i} (x)\\right) \\frac {y ^ {i} - x ^ {i}}{| y - x |} \\\\ - \\left(V _ {i} (y) - V _ {i} (x)\\right) \\frac {y ^ {i} - x ^ {i}}{| y - x |} - 2 \\psi_ {t} \\\\ \\end{array}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            341,
+            571,
+            663,
+            676
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "text",
+        "text": "As usual, we consider a point $\\left( x _ { 0 } , y _ { 0 } , t _ { 0 } \\right)$ where $Q$ first increases to zero. We will ignore the case where $x _ { 0 }$ or $y _ { 0 }$ is on the boundary, noting that since u0 approaches zero (and assuming the boundary of $\\varOmega$ is uniformly convex) one can show that $Q$ approaches negative infinity in that case. $\\mathrm { \\bf S o }$ we assume that $x _ { 0 }$ and $y _ { 0 }$ are distinct points in , and choose an orthonormal basis {ei} with en = y0−x0|y −x | . $\\Omega$ $\\left\\{ \\boldsymbol { e } _ { i } \\right\\}$ $\\begin{array} { r } { e _ { n } = \\frac { y _ { 0 } - x _ { 0 } } { | y _ { 0 } - x _ { 0 } | } } \\end{array}$ Then we can derive first the following identities from the fact that $\\left( { x } _ { 0 } , { y } _ { 0 } \\right)$ is a critical point of $Q$ at time $t _ { 0 } { : } \\mathrm { I f } \\ k < n$ then we have ",
+        "bbox": [
+            220,
+            684,
+            783,
+            759
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "page_number",
+        "text": "",
+        "bbox": [
+            766,
+            90,
+            781,
+            99
+        ],
+        "page_idx": 20
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            220,
+            112,
+            783,
+            142
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 = \\frac {\\partial}{\\partial x ^ {k}} Q = - w _ {k n} (x) - (w _ {k} (y) - w _ {k} (x));\n$$",
+        "text_format": "latex",
+        "bbox": [
+            361,
+            152,
+            645,
+            181
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "text",
+        "text": "while if $k = n$ then ",
+        "bbox": [
+            221,
+            189,
+            352,
+            203
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 = \\frac {\\partial}{\\partial x ^ {n}} Q = - w _ {n n} (x) + \\psi^ {\\prime}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            405,
+            199,
+            600,
+            229
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "text",
+        "text": "Similarly we have ",
+        "bbox": [
+            221,
+            231,
+            349,
+            246
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 = \\frac {\\partial}{\\partial y ^ {k}} Q = w _ {k n} (y) + \\left(w _ {k} (y) - w _ {k} (x)\\right)\n$$",
+        "text_format": "latex",
+        "bbox": [
+            369,
+            256,
+            633,
+            288
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "text",
+        "text": "for $k < n ,$ , and ",
+        "bbox": [
+            221,
+            296,
+            319,
+            310
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 = \\frac {\\partial}{\\partial y ^ {n}} Q = w _ {n n} (y) - \\psi^ {\\prime}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            411,
+            307,
+            593,
+            338
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "text",
+        "text": "We also compute the same components of the second derivative as we employed in the modulus of continuity argument: Moving the two points apart gives ",
+        "bbox": [
+            220,
+            343,
+            783,
+            372
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\geq \\frac {\\partial^ {2}}{\\partial s ^ {2}} Q (x _ {0} - s e _ {n}, y _ {0} + s e _ {n}, t _ {0}) \\big | _ {s = 0} = w _ {n n n} (y) - w _ {n n n} (x) - 2 \\psi^ {\\prime \\prime},\n$$",
+        "text_format": "latex",
+        "bbox": [
+            284,
+            381,
+            719,
+            412
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "text",
+        "text": "while moving x and $y$ in parallel in direction $e _ { k }$ with $k < n$ gives ",
+        "bbox": [
+            221,
+            420,
+            655,
+            435
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\geq \\frac {\\partial^ {2}}{\\partial s ^ {2}} Q (x _ {0} + s e _ {k}, y _ {0} + s e _ {k}, t _ {0}) \\big | _ {s = 0} = w _ {k k n} (y) - w _ {k k n} (y).\n$$",
+        "text_format": "latex",
+        "bbox": [
+            307,
+            444,
+            695,
+            475
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "text",
+        "text": "On the other hand we have ",
+        "bbox": [
+            221,
+            483,
+            406,
+            495
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\begin{array}{l} 0 \\leq \\frac {\\partial}{\\partial t} Q | _ {(x _ {0}, y _ {0}, t _ {0})} \\\\ = w _ {n n n} (y) - w _ {n n n} (x) + \\sum_ {k <   n} \\left(w _ {k k n} (y) - w _ {k k n} (x)\\right) \\\\ + 2 \\sum_ {k} (w _ {k} (y) w _ {k n} (y) - w _ {k} (x) w _ {k n} (x)) - (V _ {i} (y) - V _ {i} (x)) \\frac {y ^ {i} - x ^ {i}}{| y - x |} - 2 \\psi_ {t} \\\\ \\leq 2 \\psi^ {\\prime \\prime} + 2 \\psi^ {\\prime} (w _ {n} (y) - w _ {n} (x)) - 2 \\sum_ {k <   n} (w _ {k} (y) - w _ {k} (x)) ^ {2} \\\\ \\leq 2 \\psi^ {\\prime \\prime} + 4 \\psi^ {\\prime} \\psi - 2 \\psi_ {t}. \\\\ \\end{array}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            263,
+            504,
+            741,
+            646
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "text",
+        "text": "We deduce a contradiction, provided is chosen so that $\\psi _ { t } > \\psi ^ { \\prime \\prime } + 2 \\psi \\psi ^ { \\prime }$ . In fact it is enough to produce a solution of $\\psi _ { t } \\geq \\psi ^ { \\prime \\prime } + 2 \\psi \\psi ^ { \\prime } .$ , and then add $\\ E \\mathbf { e } ^ { C t }$ for suitably chosen $C .$ To conclude, we show how to produce a solution of this equation for which $Q \\le 0$ for $t = 0 \\mathrm { : }$ : We observe that if $\\phi$ is a positive solution of the heat equation, then $\\pmb { \\psi } = \\left( \\log \\phi \\right) ^ { \\prime }$ satisfies the required equation. So to produce a suitable solution, we first choose $\\psi ( . , 0 )$ suitably large so that $Q \\leq 0 \\mathrm { a t } t = 0 .$ , and then solve for $\\phi$ by writing $\\begin{array} { r } { \\phi ( s , 0 ) = \\exp \\left( \\int _ { 0 } ^ { s } \\psi ( z , 0 ) d z \\right) } \\end{array}$ . Then we solve the heat equation with ",
+        "bbox": [
+            220,
+            657,
+            783,
+            758
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "page_number",
+        "text": "",
+        "bbox": [
+            223,
+            89,
+            240,
+            99
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            784,
+            99
+        ],
+        "page_idx": 21
+    },
+    {
+        "type": "text",
+        "text": "Dirichlet boundary conditions, and set $\\phi ( s , t ) = ( \\log \\phi ) ^ { \\prime } ( s , t )$ . This produces the required barrier. Furttion on the interval $\\phi$ is a positivee know that hlet heat equa-), and therefore $\\left[ - D / 2 , D / 2 \\right]$ $\\phi \\sim C \\mathrm { e } ^ { - \\frac { \\pi ^ { 2 } } { D ^ { 2 } } t } \\cos \\left( \\frac { \\pi s } { D } \\right)$ $\\begin{array} { r } { \\psi \\sim - \\frac { \\pi } { D } \\tan \\left( \\frac { \\pi s } { D } \\right) } \\end{array}$ ) as $t \\to \\infty$ . ",
+        "bbox": [
+            220,
+            112,
+            783,
+            179
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "text",
+        "text": "Finally, applying the estimate in the particular case $u = \\mathrm { e } ^ { - \\lambda _ { 0 } t } u _ { 0 } ( x )$ give the required log-concavity estimate for u0 as $t \\to \\infty$ . ",
+        "bbox": [
+            220,
+            179,
+            783,
+            208
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "text",
+        "text": "3.5 The sharp lower bound on the fundamental gap ",
+        "text_level": 1,
+        "bbox": [
+            220,
+            244,
+            650,
+            262
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "text",
+        "text": "Now we can return to our modulus of continuity argument, and fix the error we made to get a sharp result: Applying the sharp-log-concavity estimate in the inequality (16), we find that ",
+        "bbox": [
+            220,
+            279,
+            783,
+            319
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\leq 2 \\varphi^ {\\prime \\prime} (s) - \\frac {4 \\pi}{D} \\tan \\left(\\frac {\\pi s}{D}\\right) \\varphi^ {\\prime} - 2 \\varphi_ {t}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            376,
+            319,
+            628,
+            347
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "text",
+        "text": "Now we can choose the barrier (s, t) = Ce−( 3 2D2 + )t s $\\begin{array} { r } { \\varphi ( s , t ) = C \\mathbf { e } ^ { - \\left( \\frac { 3 \\pi ^ { 2 } } { D ^ { 2 } } + \\varepsilon \\right) t } \\sin { \\left( \\frac { \\pi s } { D } \\right) } } \\end{array}$ to make the righthand side negative, producing a contradiction. This gives the estimate $\\begin{array} { r } { \\lambda _ { 1 } - \\lambda _ { 0 } \\ge \\frac { 3 \\pi ^ { 2 } } { D ^ { 2 } } } \\end{array}$ , which is the sharp lower bound on the fundamental gap. ",
+        "bbox": [
+            220,
+            353,
+            783,
+            407
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "text",
+        "text": "3.6 Sharp lower bound in terms of modulus of convexity of the potential ",
+        "text_level": 1,
+        "bbox": [
+            218,
+            443,
+            742,
+            476
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "text",
+        "text": "We remark that the proof we outlined also gives sharp results if we know that the potential is ‘more convex’ than some reference potential, in a certain sense: Suppose we have a function $\\tilde { V }$ which is even, and such that ",
+        "bbox": [
+            220,
+            494,
+            783,
+            537
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "equation",
+        "text": "$$\n(D V (y) - D V (x)) \\cdot \\frac {y - x}{| y - x |} \\geq 2 \\tilde {V} ^ {\\prime} \\left(\\frac {| y - x |}{2}\\right). \\tag {18}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            352,
+            546,
+            784,
+            577
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "text",
+        "text": "The case where $V$ is convex corresponds to $\\tilde { V } = 0$ . Then the argument for the concavity of log $u _ { 0 }$ has a single extra term, so that the function  must satisfy ",
+        "bbox": [
+            220,
+            589,
+            783,
+            618
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\psi_ {t} = 2 \\psi^ {\\prime \\prime} + 4 \\psi \\psi^ {\\prime} - 2 \\tilde {V} ^ {\\prime}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            416,
+            627,
+            589,
+            644
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "text",
+        "text": "We can produce such a barrier  by solving the one-dimensional heat equation $\\phi _ { t } = \\phi ^ { \\prime \\prime } - \\tilde { V } \\phi$ with Dirichlet boundary condition, and setting $\\pmb { \\psi } = ( \\log \\phi ) ^ { \\prime }$ . This in turn feeds into the modulus of continuity estimate to give a sharp lower bound on the gap compared to that of the one-dimensional Laplacian with potential V˜ : ",
+        "bbox": [
+            220,
+            655,
+            783,
+            713
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "text",
+        "text": "Theorem 4. Suppose that V satisfies (18) on a convex domain $\\Omega \\subset \\mathbb { R } ^ { n }$ . Then the ground state u0 satisfies the sharp log-concavity estimate (17), where $\\bar { u } _ { 0 }$ is the ground state of the one-dimensional Dirichlet Laplacian with potential ${ \\tilde { V } } ,$ , and the fundamental gap ${ \\varGamma _ { V , \\Omega } } = { \\lambda _ { 1 } } - { \\lambda _ { 0 } }$ of  −V on  satisfies ",
+        "bbox": [
+            220,
+            722,
+            783,
+            752
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "page_number",
+        "text": "23 ",
+        "bbox": [
+            766,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 22
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            218,
+            112,
+            783,
+            143
+        ],
+        "page_idx": 23
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\Gamma_ {V, \\Omega} \\geq \\Gamma_ {[ - D / 2, D / 2 ], \\tilde {V}}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            430,
+            154,
+            573,
+            172
+        ],
+        "page_idx": 23
+    },
+    {
+        "type": "text",
+        "text": "For example, this implies that for potentials with Hessian bounded below by a multiple  of the identity, the gap is at least as large as that for a quadratic potential $\\tilde { V } = { \\frac { \\mathrm { i } } { 2 } } | x | ^ { 2 }$ on the interval. It should be possible to prove this in the one-dimensional case using the methods of Lavine, but to do this we would need to know that the gap on the interval for the potential ${ \\frac { 1 } { 2 } } \\kappa x ^ { 2 } + a x$ is minimized for $a = 0 ,$ , and this seems quite non-trivial. In particular, it would be nice to be able to do this for other boundary conditions (Neumann or Robin) in the one-dimensional case. ",
+        "bbox": [
+            220,
+            180,
+            783,
+            279
+        ],
+        "page_idx": 23
+    },
+    {
+        "type": "text",
+        "text": "It is also interesting to ask whether such sharp estimates on the fundamental gap hold in other geometric situations, such as convex subsets of suitable Riemannian manifolds. In the case of convex subsets of the sphere, substantial progress has been made [31, 21], given a lower bound on the fundamental gap which is sharp in the sense that it at least as large as the lower bound in the Euclidean case, although the result so far falls short of a sharp lower bound for given diameter. ",
+        "bbox": [
+            218,
+            280,
+            783,
+            363
+        ],
+        "page_idx": 23
+    },
+    {
+        "type": "text",
+        "text": "We remark that no sharp results are known about the fundamental gap for Neumann or Robin boundary conditions in higher dimensions if there is a non-trivial potential: Our argument breaks down in the proof of log-concavity of the ground state, and indeed the ground state is in general not log-concave even with zero potential [6]. ",
+        "bbox": [
+            220,
+            365,
+            783,
+            435
+        ],
+        "page_idx": 23
+    },
+    {
+        "type": "text",
+        "text": "Lecture 4: Gradient estimates for elliptic equations ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            472,
+            663,
+            489
+        ],
+        "page_idx": 23
+    },
+    {
+        "type": "text",
+        "text": "In this final lecture I want to consider two-point maximum principles to control solutions of more general elliptic and parabolic equations, including lower order terms. I will concentrate mostly on the elliptic situation, though our methods also work for a class of parabolic equations. Most of the work I will talk about today was carried out together with Changwei Xiong, and further details and extensions of what I talk about here can be found in [9]. ",
+        "bbox": [
+            218,
+            506,
+            783,
+            592
+        ],
+        "page_idx": 23
+    },
+    {
+        "type": "text",
+        "text": "4.1 Gradient estimates and P-functions ",
+        "text_level": 1,
+        "bbox": [
+            220,
+            627,
+            549,
+            645
+        ],
+        "page_idx": 23
+    },
+    {
+        "type": "text",
+        "text": "In order to motivate the results, I will describe a class of well-known gradient estimates for elliptic equations, sometimes called ‘P-function estimates’, which were developed by many authors including Laurence Payne (with various coauthors) and presented in detail in the monograph by Rene Sperb [33]. For example [33]\\*Corollary 5.2 implies the following result: ",
+        "bbox": [
+            218,
+            662,
+            783,
+            734
+        ],
+        "page_idx": 23
+    },
+    {
+        "type": "page_number",
+        "text": "",
+        "bbox": [
+            223,
+            89,
+            240,
+            99
+        ],
+        "page_idx": 23
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 23
+    },
+    {
+        "type": "text",
+        "text": "Theorem 5. Let  be a bounded convex domain in $\\mathbb { R } ^ { n }$ , and u a (smooth) solution $o f \\Delta u + f ( u ) = 0$ on  with Neumann boundary condition $D _ { \\nu } u = 0$ . Then $| D u | ^ { 2 } +$ $2 F ( u ) \\leq \\operatorname* { s u p } \\{ F ( u ( z ) ) \\colon z \\in \\Omega \\}$ , where $F ^ { \\prime } = f .$ . ",
+        "bbox": [
+            220,
+            112,
+            783,
+            158
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "An extension of this by Luciano Modica [27] to bounded entire solutions has been important in work on the de Giorgi conjecture: ",
+        "bbox": [
+            220,
+            164,
+            783,
+            192
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "Theorem 6 (Modica [27]\\*Theorem II). Let $F \\in C ^ { 2 } ( \\mathbb { R } )$ be a non-negative function and $u \\in C ^ { 3 } ( \\mathbb { R } ^ { n } )$ a bounded entire solution of the equation $\\Delta u = f ( u )$ , where $f = F ^ { \\prime }$ . Then $| D u | ^ { 2 } ( x ) \\leq 2 F ( u ( x ) )$ for every $x \\in \\mathbb { R } ^ { n }$ . ",
+        "bbox": [
+            220,
+            199,
+            783,
+            242
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "The P-function method can also be applied to quasilinear equations of divergence form, including the p-Laplacians: ",
+        "bbox": [
+            220,
+            250,
+            783,
+            278
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "Theorem 7 ([33]\\*Theorem 7.2,[29]). If u is a (sufficiently smooth) solution of $D _ { i } \\big ( \\nu ( | D u | ^ { 2 } D _ { i } u ) + w ( | D u | ^ { 2 } ) f ( u ) = 0$ with Neumann boundary condition on a convex domain , where the ellipticity condition $\\nu ( q ) + 2 q \\nu ^ { \\prime } ( q ) > 0$ is satisfied, then ",
+        "bbox": [
+            220,
+            285,
+            786,
+            329
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "equation",
+        "text": "$$\nP (x) := \\int_ {0} ^ {| D u (x) | ^ {2}} \\frac {v (s) + 2 s v ^ {\\prime} (s)}{w (s)} d s + 2 F (u (x)) \\leq 2 \\sup _ {z \\in \\Omega} F (u (z))\n$$",
+        "text_format": "latex",
+        "bbox": [
+            290,
+            338,
+            712,
+            372
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "where $\\begin{array} { r } { F ( y ) = \\int _ { 0 } ^ { y } f ( s ) d s . } \\end{array}$ ",
+        "bbox": [
+            221,
+            382,
+            391,
+            400
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "An extension to non-compact situations was proved by Caffarelli, Garofalo and Segala [15], and there are also extensions to manifolds [19], and to anisotropic equations [20]. ",
+        "bbox": [
+            220,
+            406,
+            783,
+            447
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "These results have an interpretation in common: In the one-dimensional case, the PDE becomes an ODE, and the quantity $P ( x )$ is constant for solutions of this ODE. In particular for any value $P > \\operatorname* { s u p } _ { z \\in \\Omega } F ( z )$ , we can integrate to find a solution of the one-dimensional equation which is increasing and has range containing the range of u. ",
+        "bbox": [
+            220,
+            449,
+            783,
+            518
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "The results then say precisely that the gradient $| D u ( x ) |$ is bounded by $\\varphi ^ { \\prime } ( z )$ , where z is chosen so that $\\varphi ( z ) = u ( x )$ . That is, the gradient of u is bounded by the gradient of  at the point with the same height. ",
+        "bbox": [
+            220,
+            519,
+            783,
+            562
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "In the following we will prove a result of this kind for a much more general class of equations. ",
+        "bbox": [
+            220,
+            562,
+            783,
+            590
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "4.2 The two-point estimate ",
+        "text_level": 1,
+        "bbox": [
+            221,
+            627,
+            443,
+            643
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "We prove the following result: ",
+        "bbox": [
+            221,
+            662,
+            428,
+            676
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "Theorem 8. Suppose is a convex domain in $\\mathbb { R } ^ { n }$ , and let u be a (smooth) solution of the boundary value problem ",
+        "bbox": [
+            220,
+            683,
+            783,
+            711
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "equation",
+        "text": "$$\na ^ {i j} D _ {i} D _ {j} u + q (u, | D u |) = 0 \\quad \\text { on   } \\Omega ; \\tag {19}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            379,
+            721,
+            784,
+            738
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "equation",
+        "text": "$$\nD _ {\\nu} u = 0 \\quad o n \\partial \\Omega ,\n$$",
+        "text_format": "latex",
+        "bbox": [
+            497,
+            741,
+            625,
+            755
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "page_number",
+        "text": "25 ",
+        "bbox": [
+            766,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 24
+    },
+    {
+        "type": "text",
+        "text": "where $\\begin{array} { r } { a ^ { i j } = a ( u , | D u | ) \\frac { u _ { i } u _ { j } } { | D u | ^ { 2 } } + b ( u , | D u | ) \\left( \\delta ^ { i j } - \\frac { u _ { i } u _ { j } } { | D u | ^ { 2 } } \\right) } \\end{array}$ for some positive functions a and b. Suppose that $u ( x ) \\in [ m , M ] f o r a l l x \\in \\Omega$ , and suppose that $\\varphi : [ a , b ] \\to [ m , M ]$ is strictly increasing solution of $\\overset { \\cdot } { a } ( \\varphi , \\varphi ^ { \\prime } ) \\varphi ^ { \\prime \\prime } + q ( \\varphi , \\varphi ^ { \\prime } ) = 0$ with $\\varphi ^ { \\prime } ( z ) \\geq \\delta > 0 f o r$ all $z \\in [ a , b ]$ . Let $\\psi \\colon [ m , M ] \\to [ a , b ]$ be the inverse function of . Then ",
+        "bbox": [
+            220,
+            112,
+            783,
+            177
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\psi (u (y)) - \\psi (u (x)) \\leq | y - x |\n$$",
+        "text_format": "latex",
+        "bbox": [
+            406,
+            187,
+            600,
+            203
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "text",
+        "text": "for all $x , y \\in \\varOmega$ ",
+        "bbox": [
+            218,
+            214,
+            329,
+            227
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "text",
+        "text": "This two-point estimate has an immediate corollary obtained by allowing y and x to approach each other: ",
+        "bbox": [
+            220,
+            239,
+            783,
+            267
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "text",
+        "text": "Corollary 3. Under the assumptions above, $| D u ( x ) | \\leq \\varphi ^ { \\prime } \\circ \\psi ( u ( x ) )$ for all $x \\in \\varOmega$ . ",
+        "bbox": [
+            220,
+            277,
+            771,
+            293
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "text",
+        "text": "That is, the gradient of $u$ is bounded by that of $\\varphi ^ { \\prime }$ at the point with the same height. This includes all of the gradient estimates mentioned above, but does not require any special form of the equation. ",
+        "bbox": [
+            218,
+            303,
+            783,
+            344
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "text",
+        "text": "The proof proceeds as follows: We let $Z ( x , y ) = \\psi ( u ( y ) ) - \\psi ( u ( x ) ) - | y - x |$ , and suppose that a positive supremum of Z occurs at some point $( x _ { 0 } , y _ { 0 } ) \\in \\bar { \\Omega } \\times \\bar { \\Omega }$ . Since $Z = 0$ when $x = y$ we know that $y _ { 0 } \\neq x _ { 0 }$ . ",
+        "bbox": [
+            220,
+            344,
+            783,
+            388
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "text",
+        "text": "We can rule out the possibility that x0 or y0 is on the boundary of : Suppose x0 ∈ . Then we compute $\\begin{array} { r } { \\frac { d } { d s } Z ( x _ { 0 } - s \\nu ( x _ { 0 } ) , y _ { 0 } ) \\big | _ { s = 0 } = - \\psi ^ { \\prime } D _ { \\nu } u ( x _ { 0 } ) - \\Big \\langle \\frac { y _ { 0 } - x _ { 0 } } { | y _ { 0 } - x _ { 0 } | } , \\nu ( x _ { 0 } ) \\Big \\rangle > } \\end{array}$ to get the last inequality. This contradicts the assumption that $\\left( x _ { 0 } , y _ { 0 } \\right)$ is a maximum value, so this case cannot occur. The case where $y _ { 0 } \\in \\partial \\varOmega$ is similar. ",
+        "bbox": [
+            220,
+            388,
+            784,
+            463
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "text",
+        "text": "This leaves us with the conclusion that $x _ { 0 }$ and y0 are distinct interior points of . We choose an orthonormal basis {ei} such that en = $\\varOmega$ $\\left\\{ \\boldsymbol { e } _ { i } \\right\\}$ $\\begin{array} { r } { e _ { n } = \\frac { y _ { 0 } - x _ { 0 } } { | y _ { 0 } - x _ { 0 } | } } \\end{array}$ . Then we compute variations of Z in various directions: The first derivatives give ",
+        "bbox": [
+            220,
+            464,
+            784,
+            508
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\begin{array}{l} 0 = \\frac {d}{d s} Z (x _ {0} + s e, y _ {0} + s \\tilde {e}) \\big | _ {s = 0} \\\\ = \\left\\langle e, - \\psi^ {\\prime} (u (x _ {0})) D u (x _ {0}) + \\frac {y _ {0} - x _ {0}}{| y _ {0} - x _ {0} |} \\right\\rangle + \\left\\langle \\tilde {e}, \\psi^ {\\prime} (u (y _ {0})) - \\frac {y _ {0} - x _ {0}}{| y _ {0} - x _ {0} |} \\right\\rangle . \\\\ \\end{array}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            258,
+            516,
+            747,
+            583
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "text",
+        "text": "Since $\\psi \\circ \\varphi$ is the identity map, we have $\\begin{array} { r } { \\psi ^ { \\prime } ( u ( y ) ) = \\frac { 1 } { \\varphi ^ { \\prime } ( z _ { y } ) } } \\end{array}$ , where $z _ { y } = \\psi ( u ( y ) )$ , so we conclude that $D u ( y _ { 0 } ) = \\varphi ^ { \\prime } ( z _ { y _ { 0 } } ) e _ { n }$ and $D u ( x _ { 0 } ) = \\varphi ^ { \\prime } ( z _ { x _ { 0 } } ) e _ { n }$ . ",
+        "bbox": [
+            220,
+            590,
+            783,
+            623
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "text",
+        "text": "Next we compute useful parts of the second derivatives: Moving $x _ { 0 }$ towards $y _ { 0 }$ we have ",
+        "bbox": [
+            220,
+            624,
+            783,
+            650
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\geq \\frac {d ^ {2}}{d s ^ {2}} Z (x _ {0} + s e _ {n}, y _ {0}) \\big | _ {s = 0} = - \\psi^ {\\prime} (u (x _ {0})) D _ {n} D _ {n} u (x _ {0}) - \\psi^ {\\prime \\prime} (u (x _ {0})) (D _ {n} u (x _ {0})) ^ {2};\n$$",
+        "text_format": "latex",
+        "bbox": [
+            238,
+            658,
+            766,
+            689
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "text",
+        "text": "Similarly, moving y0 towards x0 gives ",
+        "bbox": [
+            221,
+            697,
+            480,
+            713
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\geq \\frac {d ^ {2}}{d s ^ {2}} Z (x _ {0}, y _ {0} - s e _ {n}) \\big | _ {s = 0} = \\psi^ {\\prime} (u (y _ {0})) D _ {n} D _ {n} u (y _ {0}) + \\psi^ {\\prime \\prime} (u (y _ {0})) (D _ {n} u (y _ {0})) ^ {2}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            245,
+            722,
+            757,
+            752
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "page_number",
+        "text": "",
+        "bbox": [
+            223,
+            90,
+            240,
+            99
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 25
+    },
+    {
+        "type": "text",
+        "text": "Since $\\psi ^ { \\prime } ( \\varphi ( z ) ) \\varphi ^ { \\prime } ( z ) = 1$ , differentiating further gives ",
+        "bbox": [
+            221,
+            112,
+            584,
+            129
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\psi^ {\\prime \\prime} (\\varphi (z)) \\varphi^ {\\prime} (z) ^ {2} + \\psi^ {\\prime} (\\varphi (z)) \\varphi^ {\\prime \\prime} (z) = 0,\n$$",
+        "text_format": "latex",
+        "bbox": [
+            371,
+            137,
+            633,
+            155
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "text",
+        "text": "so that ",
+        "bbox": [
+            221,
+            167,
+            270,
+            178
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\psi^ {\\prime \\prime} (u (x)) = - \\frac {\\varphi^ {\\prime \\prime} (z _ {x})}{\\varphi^ {\\prime} (z _ {x}) ^ {3}}.\n$$",
+        "text_format": "latex",
+        "bbox": [
+            423,
+            175,
+            581,
+            208
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "text",
+        "text": "Substituting this above gives ",
+        "bbox": [
+            221,
+            212,
+            418,
+            225
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "equation",
+        "text": "$$\nD _ {n} D _ {n} u (y _ {0}) \\leq \\varphi^ {\\prime \\prime} (z _ {y _ {0}})\n$$",
+        "text_format": "latex",
+        "bbox": [
+            426,
+            237,
+            576,
+            254
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "text",
+        "text": "and ",
+        "bbox": [
+            221,
+            263,
+            250,
+            275
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "equation",
+        "text": "$$\nD _ {n} D _ {n} u (x _ {0}) \\geq \\varphi^ {\\prime \\prime} (z _ {x _ {0}}).\n$$",
+        "text_format": "latex",
+        "bbox": [
+            423,
+            277,
+            579,
+            294
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "text",
+        "text": "Next we move x and y in parallel in a direction orthogonal to the line between them: ",
+        "bbox": [
+            221,
+            300,
+            783,
+            313
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 \\geq \\frac {d ^ {2}}{d s ^ {2}} Z (x _ {0} + s e _ {i}, y _ {0} + s e _ {i}) \\big | _ {s = 0} = \\frac {D _ {i} D _ {i} u (y _ {0})}{\\varphi^ {\\prime} (z _ {y _ {0}})} - \\frac {D _ {i} D _ {i} u (x _ {0})}{\\varphi^ {\\prime} (z _ {x _ {0}})}. \\tag {20}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            299,
+            323,
+            784,
+            357
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "text",
+        "text": "Now we can use the equation: ",
+        "bbox": [
+            221,
+            367,
+            426,
+            380
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "equation",
+        "text": "$$\n0 = a ^ {i j} (D u (y _ {0})) D _ {i} D _ {j} u (y _ {0}) + q (u (y _ {0}), | D u (y _ {0}) |)\n$$",
+        "text_format": "latex",
+        "bbox": [
+            223,
+            390,
+            542,
+            407
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "equation",
+        "text": "$$\n= a \\left(\\varphi \\left(z _ {y _ {0}}\\right), \\varphi^ {\\prime} \\left(z _ {y _ {0}}\\right)\\right) D _ {n} D _ {n} u \\left(y _ {0}\\right) + \\sum_ {i <   n} b \\left(\\varphi \\left(z _ {y _ {0}}\\right), \\varphi^ {\\prime} \\left(z _ {y _ {0}}\\right)\\right) D _ {i} D _ {i} u \\left(y _ {0}\\right) + q \\left(\\varphi \\left(z _ {y _ {0}}\\right), \\varphi^ {\\prime} \\left(z _ {y _ {0}}\\right)\\right),\n$$",
+        "text_format": "latex",
+        "bbox": [
+            236,
+            410,
+            813,
+            436
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "text",
+        "text": "and similarly at $x _ { 0 } .$ . In order to combine these in a way which allows us to use the inequality (20) we write ",
+        "bbox": [
+            221,
+            445,
+            783,
+            474
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\begin{array}{l} 0 = \\frac {1}{\\varphi^ {\\prime} b (\\varphi , \\varphi^ {\\prime})} \\big | _ {z _ {y _ {0}}} \\left(a ^ {i j} D _ {i} D _ {j} u | _ {y _ {0}} + q (\\varphi , \\varphi^ {\\prime}) | _ {z _ {y _ {0}}}\\right) \\\\ \\left. - \\frac {1}{\\varphi^ {\\prime} b (\\varphi , \\varphi^ {\\prime})} \\right| _ {z _ {x _ {0}}} \\left(a ^ {i j} D _ {i} D _ {j} u | _ {x _ {0}} + q (\\varphi , \\varphi^ {\\prime}) | _ {z _ {x _ {0}}}\\right) \\\\ = \\frac {a \\left(\\varphi , \\varphi^ {\\prime}\\right)}{\\varphi^ {\\prime} b \\left(\\varphi , \\varphi^ {\\prime}\\right)} \\big | _ {z _ {y _ {0}}} D _ {n} D _ {n} u \\left(y _ {0}\\right) + \\frac {\\sum_ {i <   n} D _ {i} D _ {i} u \\left(y _ {0}\\right)}{\\varphi^ {\\prime} \\left(z _ {y _ {0}}\\right)} + \\frac {q \\left(\\varphi , \\varphi^ {\\prime}\\right)}{\\varphi^ {\\prime} b \\left(\\varphi , \\varphi^ {\\prime}\\right)} \\big | _ {z _ {y}} \\\\ \\left. - \\frac {a \\left(\\varphi , \\varphi^ {\\prime}\\right)}{\\varphi^ {\\prime} b \\left(\\varphi , \\varphi^ {\\prime}\\right)} \\right| _ {z _ {x _ {0}}} D _ {n} D _ {n} u \\left(x _ {0}\\right) - \\frac {\\sum_ {i <   n} D _ {i} D _ {i} u \\left(x _ {0}\\right)}{\\varphi^ {\\prime} \\left(z _ {x _ {0}}\\right)} - \\frac {q \\left(\\varphi , \\varphi^ {\\prime}\\right)}{\\varphi^ {\\prime} b \\left(\\varphi , \\varphi^ {\\prime}\\right)} \\mid_ {z _ {x _ {0}}} \\\\ \\leq \\frac {1}{\\varphi^ {\\prime} b (\\varphi , \\varphi^ {\\prime})} \\left(a (\\varphi , \\varphi^ {\\prime}) \\varphi^ {\\prime \\prime} + q (\\varphi , \\varphi^ {\\prime})\\right) \\big | _ {z _ {x _ {0}}} ^ {z _ {y _ {0}}} \\\\ \\end{array}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            270,
+            482,
+            731,
+            646
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "text",
+        "text": "Now we observe that if $\\varphi$ is a solution of the one-dimensional equation $a \\varphi ^ { \\prime \\prime } + q =$ 0, then the right-hand side vanishes, which does not tell us anything. However, if we start with such a solution (as in the hypotheses of the theorem) then since $\\varphi ^ { \\prime }$ is bounded away from zero, we can approximate $\\varphi$ by a sequence of increasing functions $\\varphi _ { \\varepsilon } ,$ with range still containing [m, M], and which satisfy ",
+        "bbox": [
+            220,
+            656,
+            784,
+            727
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "equation",
+        "text": "$$\na (\\varphi_ {\\varepsilon}, \\varphi_ {\\varepsilon} ^ {\\prime}) \\varphi_ {\\varepsilon} ^ {\\prime \\prime} + q (\\varphi_ {\\varepsilon}, \\varphi_ {\\varepsilon} ^ {\\prime}) = - \\varepsilon x \\varphi_ {\\varepsilon} ^ {\\prime} b (\\varphi_ {\\varepsilon}, \\varphi_ {\\varepsilon} ^ {\\prime}).\n$$",
+        "text_format": "latex",
+        "bbox": [
+            351,
+            737,
+            653,
+            753
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "page_number",
+        "text": "27 ",
+        "bbox": [
+            766,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 26
+    },
+    {
+        "type": "text",
+        "text": "For these choices we conclude that the right-hand side is strictly negative, a contradiction, so we conclude that the estimate of the Theorem holds for  replaced by . Finally, allowing  to approach zero gives the desired result. ",
+        "bbox": [
+            220,
+            112,
+            783,
+            156
+        ],
+        "page_idx": 27
+    },
+    {
+        "type": "text",
+        "text": "There are many generalisations of this result: The result adapts easily to Dirichlet boundary conditions; It applies with minor modifications on Riemannian manifolds with non-negative Ricci curvature; it also has versions that apply in ‘anisotropic’ settings such as Finsler manifolds; since the argument does not differentiate the equation, it applies easily to viscosity solutions as well as classical solutions; and because of this, it also applies in non-compact settings, since we can translate (or take a limit of Riemannian manifolds) to make the maximum of Z occur (in a suitable limit) within bounded distance of the origin. For details, see [9]. ",
+        "bbox": [
+            220,
+            156,
+            784,
+            269
+        ],
+        "page_idx": 27
+    },
+    {
+        "type": "text",
+        "text": "References ",
+        "text_level": 1,
+        "bbox": [
+            223,
+            306,
+            319,
+            321
+        ],
+        "page_idx": 27
+    },
+    {
+        "type": "list",
+        "sub_type": "ref_text",
+        "list_items": [
+            "1. Andrews, B.: Moduli of continuity, isoperimetric profiles, and multi-point estimates in geometric heat equations. In: Surveys in differential geometry 2014. Regularity and evolution of nonlinear equations, Surv. Differ. Geom., vol. 19, pp. 1–47. Int. Press, Somerville, MA (2015). ",
+            "2. Andrews, B., Clutterbuck, J.: Lipschitz bounds for solutions of quasilinear parabolic equations in one space variable. J. Differential Equations 246(11), 4268–4283 (2009). ",
+            "3. Andrews, B., Clutterbuck, J.: Time-interior gradient estimates for quasilinear parabolic equations. Indiana Univ. Math. J. 58(1), 351–380 (2009). ",
+            "4. Andrews, B., Clutterbuck, J.: Proof of the fundamental gap conjecture. J. Amer. Math. Soc. 24(3), 899–916 (2011). ",
+            "5. Andrews, B., Clutterbuck, J.: Sharp modulus of continuity for parabolic equations on manifolds and lower bounds for the first eigenvalue. Anal. PDE 6(5), 1013–1024 (2013). ",
+            "6. Andrews, B., Cluuterbuck, J., Hauer, D.: Non-concavity of the robin ground state (2019), https://arxiv.org/abs/1711.02779 ",
+            "7. Andrews, B., Li, H.: Embedded constant mean curvature tori in the three-sphere. J. Differential Geom. 99(2), 169–189 (2015). ",
+            "8. Andrews, B., Ni, L.: Eigenvalue comparison on Bakry-Emery manifolds. Comm. Partial Differential Equations 37(11), 2081–2092 (2012). ",
+            "9. Andrews, B., Xiong, C.: Gradient estimates via two-point functions for elliptic equations on manifolds. Adv. Math. 349, 1151–1197 (2019). ",
+            "10. Ashbaugh, M.S., Benguria, R.: Optimal lower bound for the gap between the first two eigenvalues of one-dimensional Schrodinger operators with symmetric single-well potentials. Proc. ¨ Amer. Math. Soc. 105(2), 419–424 (1989). ",
+            "11. Bakry, D., Qian, Z.: Some new results on eigenvectors via dimension, diameter, and Ricci curvature. Adv. Math. 155(1), 98–153 (2000). ",
+            "12. van den Berg, M.: On condensation in the free-boson gas and the spectrum of the Laplacian. J. Statist. Phys. 31(3), 623–637 (1983). ",
+            "13. Brascamp, H.J., Lieb, E.H.: On extensions of the Brunn-Minkowski and Prekopa-Leindler´ theorems, including inequalities for log concave functions, and with an application to the diffusion equation. J. Functional Analysis 22(4), 366–389 (1976). ",
+            "14. Brendle, S.: Embedded minimal tori in S3 and the Lawson conjecture. Acta Math. 211(2), 177–190 (2013). ",
+            "15. Caffarelli, L., Garofalo, N., Segala, F.: A gradient bound for entire solutions of quasi-linear \\` equations and its consequences. Comm. Pure Appl. Math. 47(11), 1457–1473 (1994). ",
+            "16. Chen, M., Wang, F.: Application of coupling method to the first eigenvalue on manifold. Progr. Natur. Sci. (English Ed.) 5(2), 227–229 (1995) "
+        ],
+        "bbox": [
+            223,
+            337,
+            786,
+            756
+        ],
+        "page_idx": 27
+    },
+    {
+        "type": "page_number",
+        "text": "28 ",
+        "bbox": [
+            223,
+            90,
+            240,
+            99
+        ],
+        "page_idx": 27
+    },
+    {
+        "type": "header",
+        "text": "Ben Andrews ",
+        "bbox": [
+            702,
+            89,
+            783,
+            99
+        ],
+        "page_idx": 27
+    },
+    {
+        "type": "list",
+        "sub_type": "ref_text",
+        "list_items": [
+            "17. Chen, M.F., Wang, F.Y.: Application of coupling method to the first eigenvalue on manifold. Sci. China Ser. A 37(1), 1–14 (1994) ",
+            "18. Esposito, L., Nitsch, C., Trombetti, C.: Best constants in Poincare inequalities for convex ´ domains. J. Convex Anal. 20(1), 253–264 (2013) ",
+            "19. Farina, A., Valdinoci, E.: A pointwise gradient bound for elliptic equations on compact manifolds with nonnegative Ricci curvature. Discrete Contin. Dyn. Syst. 30(4), 1139–1144 (2011). ",
+            "20. Farina, A., Valdinoci, E.: Gradient bounds for anisotropic partial differential equations. Calc. Var. Partial Differential Equations 49(3-4), 923–936 (2014). ",
+            "21. He, C., We, G.: Fundamental gap of convex domains in the spheres (2017), https://arxiv.org/pdf/1705.11152.pdf ",
+            "22. Kroger, P.: On the ranges of eigenfunctions on compact manifolds. Bull. London Math. Soc. ¨ 30(6), 651–655 (1998). ",
+            "23. Lavine, R.: The eigenvalue gap for one-dimensional convex potentials. Proc. Amer. Math. Soc. 121(3), 815–821 (1994). ",
+            "24. Li, P.: A lower bound for the first eigenvalue of the Laplacian on a compact manifold. Indiana Univ. Math. J. 28(6), 1013–1019 (1979). ",
+            "25. Li, P., Yau, S.T.: Estimates of eigenvalues of a compact Riemannian manifold. In: Geometry of the Laplace operator (Proc. Sympos. Pure Math., Univ. Hawaii, Honolulu, Hawaii, 1979), Proc. Sympos. Pure Math., XXXVI, pp. 205–239. Amer. Math. Soc., Providence, R.I. (1980) ",
+            "26. Li, X., Wang, K.: Moduli of continuity for viscosity solutions on manifolds. J. Geom. Anal. 27(1), 557–576 (2017). ",
+            "27. Modica, L.: A gradient bound and a Liouville theorem for nonlinear Poisson equations. Comm. Pure Appl. Math. 38(5), 679–684 (1985). ",
+            "28. Naber, A., Valtorta, D.: Sharp estimates on the first eigenvalue of the p-Laplacian with negative Ricci lower bound. Math. Z. 277(3-4), 867–891 (2014). ",
+            "29. Payne, L.E., Philippin, G.A.: Some maximum principles for nonlinear elliptic equations in divergence form with applications to capillary surfaces and to surfaces of constant mean curvature. Nonlinear Anal. 3(2), 193–211 (1979). ",
+            "30. Payne, L.E., Weinberger, H.F.: An optimal Poincare inequality for convex domains. Arch. ´ Rational Mech. Anal. 5, 286–292 (1960) (1960). ",
+            "31. Seto, S., Wang, L., Wei, G.: Sharp fundamental gap estimate on convex domains of sphere. J. Differential Geom. 112(2), 347–389 (2019). DOI 10.4310/jdg/1559786428. URL https://doiorg.virtual.anu.edu.au/10.4310/jdg/1559786428 ",
+            "32. Singer, I.M., Wong, B., Yau, S.T., Yau, S.S.T.: An estimate of the gap of the first two eigenvalues in the Schrodinger operator. Ann. Scuola Norm. Sup. Pisa Cl. Sci. (4)¨ 12(2), 319–333 (1985). ",
+            "33. Sperb, R.P.: Maximum principles and their applications, Mathematics in Science and Engineering, vol. 157. Academic Press, Inc. [Harcourt Brace Jovanovich, Publishers], New York-London (1981) ",
+            "34. Valtorta, D.: Sharp estimate on the first eigenvalue of the p-Laplacian. Nonlinear Anal. 75(13), 4974–4994 (2012). ",
+            "35. Yu, Q.H., Zhong, J.Q.: Lower bounds of the gap between the first and second eigenvalues of the Schrodinger operator. Trans. Amer. Math. Soc.¨ 294(1), 341–349 (1986). ",
+            "36. Zhong, J.Q., Yang, H.C.: On the estimate of the first eigenvalue of a compact Riemannian manifold. Sci. Sinica Ser. A 27(12), 1265–1273 (1984) "
+        ],
+        "bbox": [
+            216,
+            112,
+            786,
+            650
+        ],
+        "page_idx": 28
+    },
+    {
+        "type": "header",
+        "text": "Multi-point maximum principles and eigenvalue estimates ",
+        "bbox": [
+            221,
+            89,
+            559,
+            102
+        ],
+        "page_idx": 28
+    },
+    {
+        "type": "page_number",
+        "text": "",
+        "bbox": [
+            766,
+            90,
+            783,
+            99
+        ],
+        "page_idx": 28
+    }
+]

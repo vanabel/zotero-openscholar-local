@@ -1,0 +1,28 @@
+{
+  "name": "zotero-openscholar-local",
+  "private": true,
+  "description": "Monorepo orchestration (API + Web dev/test)",
+  "scripts": {
+    "setup": "npm run setup:api && npm run setup:web",
+    "setup:api": "cd apps/api && (test -d .venv || python3 -m venv .venv) && .venv/bin/pip install -U pip -q && .venv/bin/pip install -e '.[dev,hf,openscholar]' -q",
+    "setup:api:openscholar": "cd apps/api && .venv/bin/pip install -e '.[openscholar]' -q",
+    "download:mineru-models": "cd apps/api && .venv/bin/python scripts/download_mineru_local_models.py --base ./data/mineru-models",
+    "reindex": "cd apps/api && .venv/bin/python scripts/reindex_library.py",
+    "reindex:all": "cd apps/api && .venv/bin/python scripts/reindex_library.py --all",
+    "setup:web": "npm --prefix apps/web install",
+    "dev": "concurrently -k -n mineru,api,web -c blue,cyan,magenta \"npm run dev:mineru-api\" \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:mineru-api": "bash scripts/dev-mineru-api.sh",
+    "dev:no-mineru": "concurrently -k -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "cd apps/api && .venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:web": "npm --prefix apps/web run dev",
+    "build": "npm run build:web",
+    "build:web": "npm --prefix apps/web run build",
+    "lint:web": "npm --prefix apps/web run lint",
+    "test": "npm run test:api",
+    "test:api": "cd apps/api && .venv/bin/pytest -q"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "packageManager": "pnpm@9.15.4"
+}

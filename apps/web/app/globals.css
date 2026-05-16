@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-mist-50 text-ink-900 antialiased;
+}
+
+/* KaTeX 块级公式横向滚动，避免撑破卡片 */
+.prose-math .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+}
