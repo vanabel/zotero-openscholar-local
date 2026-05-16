@@ -6,9 +6,12 @@ from fastapi.responses import FileResponse, JSONResponse
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
+# 与文献库 list limit 上限一致；全选数千篇时需一次提交
+BATCH_INDEX_MAX_IDS = 10_000
+
 
 class BatchIndexBody(BaseModel):
-    paper_ids: list[str] = Field(..., min_length=1, max_length=100)
+    paper_ids: list[str] = Field(..., min_length=1, max_length=BATCH_INDEX_MAX_IDS)
     force: bool = False
     reindex_only: bool = False
 

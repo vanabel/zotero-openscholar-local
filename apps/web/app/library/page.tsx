@@ -417,6 +417,8 @@ export default function LibraryPage() {
     }
   }
 
+  const INDEX_BATCH_CHUNK = 500;
+
   async function indexSelected(force: boolean) {
     const ids = [...selected];
     if (ids.length === 0) {
@@ -424,23 +426,38 @@ export default function LibraryPage() {
       return;
     }
     setBatchBusy(true);
-    setMsg(`提交批量索引（${ids.length} 篇）…`);
+    let totalQueued = 0;
+    let totalFailed = 0;
+    const errSamples: string[] = [];
     try {
-      const res = await apiPost<{
-        queued?: number;
-        failed?: number;
-        tasks?: { task_id?: string; paper_id?: string; error?: string; deduped?: boolean }[];
-      }>("/papers/index-batch", { paper_ids: ids, force });
-      const errs = (res.tasks ?? []).filter((t) => t.error);
+      for (let i = 0; i < ids.length; i += INDEX_BATCH_CHUNK) {
+        const chunk = ids.slice(i, i + INDEX_BATCH_CHUNK);
+        const from = i + 1;
+        const to = i + chunk.length;
+        setMsg(
+          ids.length > INDEX_BATCH_CHUNK
+            ? `提交批量索引（共 ${ids.length} 篇，第 ${from}–${to} 篇）…`
+            : `提交批量索引（${ids.length} 篇）…`,
+        );
+        const res = await apiPost<{
+          queued?: number;
+          failed?: number;
+          tasks?: { task_id?: string; paper_id?: string; error?: string; deduped?: boolean }[];
+        }>("/papers/index-batch", { paper_ids: chunk, force });
+        totalQueued += res.queued ?? 0;
+        totalFailed += res.failed ?? 0;
+        for (const t of res.tasks ?? []) {
+          if (t.error && errSamples.length < 3) {
+            errSamples.push(t.error);
+          }
+        }
+      }
       const errHint =
-        errs.length > 0
-          ? `；无法入队 ${errs.length} 篇：${errs
-              .slice(0, 2)
-              .map((f) => f.error ?? "")
-              .join("；")}`
+        totalFailed > 0
+          ? `；无法入队 ${totalFailed} 篇${errSamples.length > 0 ? `：${errSamples.join("；")}` : ""}`
           : "";
       setTaskPolling(true);
-      setMsg(`已提交 ${res.queued ?? ids.length} 篇到后台队列，请查看各文献索引状态${errHint}。`);
+      setMsg(`已提交 ${totalQueued} 篇到后台队列，请查看各文献索引状态${errHint}。`);
       setSelected(new Set());
       await syncActiveTasks();
     } catch (e) {

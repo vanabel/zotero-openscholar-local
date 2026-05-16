@@ -28,7 +28,7 @@
 | POST | `/papers/{id}/index` | 解析 + 分块 + 嵌入；默认 **202** + `task_id`；`wait=true` 同步 |
 | POST | `/papers/{id}/index?reindex_only=true` | 仅重建分块/嵌入，复用 `document.md` |
 | POST | `/papers/{id}/reindex-only` | 同上 |
-| POST | `/papers/index-batch` | 批量；body 可含 `paper_ids`、`force`、`reindex_only` |
+| POST | `/papers/index-batch` | 批量；body 可含 `paper_ids`（最多 10000）、`force`、`reindex_only` |
 
 ## 任务
 
