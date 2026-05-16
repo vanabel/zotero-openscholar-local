@@ -19,6 +19,71 @@ def retrieve_limits() -> tuple[int, int]:
     return fts, final
 
 
+def apply_paper_quota(
+    ranked: list[dict],
+    *,
+    max_per_paper: int,
+    max_distinct_papers: int | None,
+    limit: int,
+) -> list[dict]:
+    """
+    在保持重排顺序的前提下限制单篇 chunk 数与文献篇数，避免一篇 PDF 垄断上下文。
+    max_per_paper / max_distinct_papers 为 0 时表示该项不限制。
+    """
+    if not ranked or limit <= 0:
+        return []
+    out: list[dict] = []
+    per_paper: dict[str, int] = {}
+    papers_in_out: set[str] = set()
+    for c in ranked:
+        pid = str(c.get("paper_id") or "")
+        if not pid:
+            continue
+        if max_per_paper > 0 and per_paper.get(pid, 0) >= max_per_paper:
+            continue
+        if (
+            max_distinct_papers is not None
+            and max_distinct_papers > 0
+            and pid not in papers_in_out
+            and len(papers_in_out) >= max_distinct_papers
+        ):
+            continue
+        out.append(c)
+        per_paper[pid] = per_paper.get(pid, 0) + 1
+        papers_in_out.add(pid)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _finalize_retrieval(candidates: list[dict], top_k_final: int) -> list[dict]:
+    """截断 top_k 并应用跨篇配额（若已配置）。"""
+    trimmed = candidates[:top_k_final]
+    max_per = settings.retrieve_max_chunks_per_paper
+    max_papers = settings.retrieve_max_papers
+    if max_per <= 0 and max_papers <= 0:
+        return trimmed
+    max_distinct = max_papers if max_papers > 0 else None
+    max_per_eff = max_per if max_per > 0 else top_k_final
+    before = len(trimmed)
+    out = apply_paper_quota(
+        trimmed,
+        max_per_paper=max_per_eff,
+        max_distinct_papers=max_distinct,
+        limit=top_k_final,
+    )
+    if before != len(out):
+        plog_info(
+            "retrieve",
+            "跨篇配额 max_per_paper=%s max_papers=%s：%s → %s 条",
+            max_per_eff,
+            max_distinct,
+            before,
+            len(out),
+        )
+    return out
+
+
 # FTS5 查询语法中的保留词；作为「词」出现时需避免参与 MATCH，否则会语法错误或语义错误。
 _FTS5_QUERY_RESERVED = frozenset(
     {
@@ -455,12 +520,13 @@ def _openscholar_retrieve_sync(
                 plog_info("retrieve", "FTS 无命中，OpenScholar dense-only 候选=%s", len(candidates))
 
     if use_reranker:
-        return _rerank_with_cross_encoder(query, candidates, top_k_final)
+        return _finalize_retrieval(_rerank_with_cross_encoder(query, candidates, top_k_final), top_k_final)
     if use_retriever and query_vec:
         order = _dense_rank_chunk_ids(query_vec, candidates, limit=top_k_final)
         by_id = {str(c["chunk_id"]): c for c in candidates}
-        return [by_id[cid] for cid in order if cid in by_id][:top_k_final]
-    return candidates[:top_k_final]
+        ranked = [by_id[cid] for cid in order if cid in by_id][:top_k_final]
+        return _finalize_retrieval(ranked, top_k_final)
+    return _finalize_retrieval(candidates[:top_k_final], top_k_final)
 
 
 async def retrieve_for_query(
@@ -504,6 +570,7 @@ async def retrieve_for_query(
                 top_k_final=top_k_final,
             )
             if top:
+                top = _finalize_retrieval(top, top_k_final)
                 plog_info(
                     "retrieve",
                     "retrieve_for_query (OpenScholar) 返回=%s 耗时=%.2fs",
@@ -530,7 +597,7 @@ async def retrieve_for_query(
     )
 
     if query_vec:
-        return _legacy_vector_rerank(candidates, query_vec, top_k_final)
+        return _finalize_retrieval(_legacy_vector_rerank(candidates, query_vec, top_k_final), top_k_final)
 
     plog_info("retrieve", "无 query 向量，截断返回 top_k=%s", top_k_final)
-    return candidates[:top_k_final]
+    return _finalize_retrieval(candidates[:top_k_final], top_k_final)

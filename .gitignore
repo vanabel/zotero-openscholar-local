@@ -1,12 +1,16 @@
 # 本地数据与虚拟环境
 data/
+apps/api/data/
 apps/api/.venv/
 apps/web/node_modules/
 node_modules/
 apps/web/.next/
 **/__pycache__/
+.pytest_cache/
 *.pyc
 .DS_Store
 .env
 apps/api/.env
 apps/web/.env.local
+# MinerU 云解析断点目录
+**/parsed/**/_mineru_cloud_chunks/

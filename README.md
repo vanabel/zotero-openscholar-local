@@ -1,8 +1,8 @@
 # zotero-openscholar-local
 
-将 **Zotero 本地 PDF** 扫描入库，解析（MinerU 或 pypdf 降级）、分块、检索（**FTS5** + 可选 **OpenScholar Retriever/Reranker** 或 Ollama 嵌入），并通过网页完成**带引用的问答**与**文献综述**。流程在「证据检索 + 引用式作答」上与 **[OpenScholar](https://arxiv.org/abs/2411.14199)** 同类；**LLM 与索引均为本机/自管**，非 OpenScholar 官方服务或 OSDS 远程库。
+**单人**个人科研知识库：将 **Zotero 本地 PDF** 解析、分块、检索，用于**文献问答**、**文献综述**与**项目申请书素材**。核心投入在解析 / chunk / 检索 / 引用 / 综述模板五类质量（见 **[ROADMAP.md](./ROADMAP.md)**）。
 
-迭代计划见 **[ROADMAP.md](./ROADMAP.md)**。
+技术上：MinerU 或 pypdf 降级 → Markdown 分块 → **FTS5** + 可选 **OpenScholar Retriever/Reranker**（含 **RRF** 与**跨篇配额**）→ 带 `[n]` 引用的问答与综述。与 **[OpenScholar](https://arxiv.org/abs/2411.14199)** 同类「证据检索 + 可核查引用」；**LLM 与索引均为本机/自管**。
 
 ---
 
@@ -99,6 +99,7 @@ npm install && npm run setup && npm run dev
 | `OLLAMA_CHAT_MODEL` / `OLLAMA_EMBED_MODEL` | 对话与可选嵌入 |
 | `OPENSCHOLAR_RETRIEVER_ENABLED` / `OPENSCHOLAR_RERANKER_ENABLED` | 启用官方检索/精排（PyTorch，见下节） |
 | `RETRIEVE_TOP_K_FTS` / `RETRIEVE_TOP_K_FINAL` | FTS 召回数 / 交给 LLM 的最终条数 |
+| `RETRIEVE_MAX_CHUNKS_PER_PAPER` / `RETRIEVE_MAX_PAPERS` | 单篇最多 chunk 数 / 最多文献篇数（`0` = 不限制） |
 | `BILINGUAL_RETRIEVAL` / `BILINGUAL_ANSWER` | 双语检索扩展 / 第二语言答案 |
 | `TRANSLATION_OLLAMA_MODEL` | Hy-MT 等翻译模型（Ollama） |
 | `MINERU_MODE` | `cli`（本机）或 `cloud`（[mineru.net](https://mineru.net) + `MINERU_API_TOKEN`） |

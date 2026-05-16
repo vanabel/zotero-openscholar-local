@@ -56,6 +56,12 @@ class Settings(BaseSettings):
 
     retrieve_top_k_fts: int = Field(default=40, ge=5, le=200, validation_alias="RETRIEVE_TOP_K_FTS")
     retrieve_top_k_final: int = Field(default=8, ge=1, le=100, validation_alias="RETRIEVE_TOP_K_FINAL")
+    # 跨篇均衡：单篇最多保留几条 chunk；0 表示不限制每篇条数
+    retrieve_max_chunks_per_paper: int = Field(
+        default=3, ge=0, le=20, validation_alias="RETRIEVE_MAX_CHUNKS_PER_PAPER"
+    )
+    # 最多纳入几篇不同文献；0 表示不限制文献篇数
+    retrieve_max_papers: int = Field(default=8, ge=0, le=50, validation_alias="RETRIEVE_MAX_PAPERS")
 
     openscholar_retriever_enabled: bool = Field(default=True, validation_alias="OPENSCHOLAR_RETRIEVER_ENABLED")
     openscholar_reranker_enabled: bool = Field(default=True, validation_alias="OPENSCHOLAR_RERANKER_ENABLED")

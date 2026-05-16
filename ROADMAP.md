@@ -1,186 +1,228 @@
-# Roadmap
+# Roadmap v2 — 质量目标驱动
 
-按**当前实现**与可验收里程碑排列。与 [README.md](./README.md) 交叉维护。
+**定位**：单人使用的个人科研知识库（Zotero Research Knowledge Base）。核心场景为**文献问答**、**文献综述**、**项目申请书素材整理**。
 
-**图例**：`[x]` = 已在主线实现；`[ ]` = 未做或仅占位；`[~]` = 部分实现（见条目说明）。
+**投入重点**（第一年不做生成模型微调）：
+
+1. 解析质量  
+2. Chunk 质量  
+3. 检索质量  
+4. 引用可靠性  
+5. 综述结构模板  
+
+与 [README.md](./README.md) 交叉维护。历史功能向规划见 [chatgpt.md](./chatgpt.md)；本版路线细节见 [chatgpt2.md](./chatgpt2.md)。
+
+**图例**：`[x]` 已实现；`[~]` 部分实现；`[ ]` 未做。
 
 ---
 
-## 当前能力（2026-05）
+## 架构（六层）
 
-### 已可用 `[x]`
+```text
+┌─────────────────────────────────────────┐
+│ 6. 应用层：问答 / 综述 / 申请书 / 导出   │
+└─────────────────────────────────────────┘
+                    ▲
+┌─────────────────────────────────────────┐
+│ 5. 生成与引用：Evidence + CitationVerifier│
+└─────────────────────────────────────────┘
+                    ▲
+┌─────────────────────────────────────────┐
+│ 4. 检索：FTS + dense + RRF + quota + rerank│
+└─────────────────────────────────────────┘
+                    ▲
+┌─────────────────────────────────────────┐
+│ 3. 知识组织：chunks + summaries          │
+└─────────────────────────────────────────┘
+                    ▲
+┌─────────────────────────────────────────┐
+│ 2. 解析与清洗：MinerU + parse_reports    │
+└─────────────────────────────────────────┘
+                    ▲
+┌─────────────────────────────────────────┐
+│ 1. 数据源：Zotero storage + zotero.sqlite │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## 基线能力（v0.1 MVP，已提交 main）
+
+以下在 `quality-roadmap-v2` 之前的主线已实现，作为质量迭代的起点：
 
 | 领域 | 状态 |
 |------|------|
-| **前端** | `[x]` Next.js 14：概览、文献库（搜索、多选、批量索引）、问答、综述、设置 |
-| **后端** | `[x]` FastAPI：`/health`、`/stats`、`/scan`、`/papers`、`/papers/{id}/index`、`/papers/index-batch`、`/chat`、`/chat/stream`、`/review`、`/review/stream`、`/settings`、`/chunks/{id}` |
-| **存储** | `[x]` SQLite：`papers`、`chunks`、`summaries`、`tasks`、`app_settings`、`chat_cache`；片段 **FTS5**；`scholar_embedding_json` |
-| **Zotero** | `[x]` 扫描 `storage` 下 PDF；增量 `sha256` / 大小 / `mtime`；`deleted` 标记 |
-| **Zotero 题录** | `[x]` 只读 `zotero.sqlite` → `papers`（标题、作者、年份、期刊、DOI、标签、集合）；扫描后自动同步；`POST /papers/sync-zotero-metadata` |
-| **解析** | `[x]` MinerU CLI / 常驻 `mineru-api` / **cloud API**；超页数 **自动切片 + 断点续传**；zip 下载重试；pypdf 降级；`dev-mineru-api.sh` |
-| **索引** | `[x]` Markdown 分块；Ollama/OpenAI 嵌入；**OpenScholar Retriever 稠密向量**（可选）；`reindex_only`；非 force 复用 `document.md` |
-| **检索** | `[x]` FTS + 多查询合并；**RRF**（FTS + OpenScholar dense）；**OpenScholar Reranker** 或 Ollama 余弦；可配置 `RETRIEVE_TOP_K_*` |
-| **生成** | `[x]` 引用式 `[n]` 问答与综述；SSE 流式 |
-| **双语** | `[x]` `BILINGUAL_RETRIEVAL` / `BILINGUAL_ANSWER` + Hy-MT（`translation.py`）；流式 `bilingual*`（问答侧） |
-| **缓存** | `[x]` 问答 / 综述缓存；`/chat/recent`、`/review/recent` |
-| **展示** | `[x]` Markdown + KaTeX（`/chat`、`/review`） |
-| **状态校准** | `[x]` 列表/详情加载时根据 `document.md` 与 `chunks` 回写 `parse_status` / `index_status` |
-| **配置** | `[x]` 固定加载 `apps/api/.env`（不依赖 cwd）；设置页展示生效值与相对仓库根路径 |
-| **运维脚本** | `[x]` `reindex` / `reindex:all`；`download:mineru-models` |
-| **测试** | `[x]` pytest：健康检查、检索词、RRF、缓存、翻译 sanitize、Zotero sqlite 同步、MinerU 切片路径、可选 Ollama 翻译冒烟 |
-| **工程** | `[x]` pnpm workspace + `concurrently`；`PIPELINE_LOG`；可选 PM2 |
-
-### 近期已完成（相对初版 MVP）
-
-- [x] **OpenScholar Retriever + Reranker**（PyTorch，`openscholar_retrieval.py` + `retriever.py` RRF）
-- [x] **`scholar_embedding_json`** 建索引与全库 dense 召回
-- [x] **`POST /chat/stream`**、双语 SSE、问答缓存
-- [x] **文献库**：标题/路径/作者/标签/集合搜索、批量 `index-batch`、强制重建
-- [x] **MinerU cloud**（`MINERU_MODE=cloud`）
-- [x] **MinerU cloud 大 PDF**：按页切片、合并 Markdown、**分段断点续传**（`_mineru_cloud_chunks/_progress.json`）
-- [x] **`reindex_only`** API 与 CLI `pnpm run reindex[:all]`
-- [x] **非 force 复用**已有 `document.md` / 已有索引
-- [x] **综述 / 问答**流式与缓存、`/review/recent`
-- [x] **Zotero 题录同步**（`zotero_sqlite_sync.py` + 文献库展示作者/标签/集合）
-- [x] **设置页**：真实生效配置 + `apps/api/.env` 路径说明（非硬编码示例块）
-- [x] **解析完成后**将 `index_status` 置为 `pending`，避免与旧 chunk 误显示为已索引
-
-### 明确未做或仅占位 `[ ]`
-
-- [ ] **LanceDB / Qdrant** 等专用向量库（当前 dense 存 SQLite `scholar_embedding_json`）
-- [ ] **异步任务队列**（Celery/RQ）与索引进度 WebSocket/SSE
-- [ ] **「仅索引未 indexed」** 一键 API（需自写脚本或手动筛选 `index_status`）
-- [ ] **跨篇配额**（每篇最多 k chunk）、chunk 去重策略
-- [ ] **综述双语**流式、导出 Markdown/DOCX、`summaries` 表用于综述聚合
-- [ ] **前端**暴露 OpenScholar / 双语开关（主要靠 `.env`）
-- [ ] **Transformers 直连** OpenScholar-8B（无 Ollama）
-- [ ] **ScholarQA 评测**、外部 Semantic Scholar / OpenAlex 补全文
-- [ ] **CI**（GitHub Actions）
-- [ ] **shadcn/ui** 组件库统一
-- [ ] **文献库 UX**：索引进度条、失败重试入口、解析预览（`document.md` 片段）
-- [ ] **错误面**：LLM/嵌入/Ollama/OpenScholar 不可用时的统一 JSON 与前端提示
+| Zotero 扫描 + 题录同步 | `[x]` |
+| MinerU / pypdf 解析、cloud 切片 | `[x]` |
+| Markdown 分块 + FTS5 + 嵌入 + OpenScholar dense | `[x]` |
+| FTS + RRF + Reranker / Ollama 重排 | `[x]` |
+| 问答 / 综述流式、`[n]` 提示、缓存 | `[x]` |
+| 双语检索 / 答案（可选） | `[x]` |
+| Next.js：概览、文献库、问答、综述、设置 | `[x]` |
 
 ---
 
-## Phase 0 — 稳定 MVP（短期）
+## P0 — 工程稳定性
 
-目标：新环境少踩坑、核心路径可回归。
+**目标**：坏了能发现，错了能定位。
 
-- [x] README / ROADMAP 与实现同步
-- [x] API 冒烟与检索/缓存单元测试；可选 Ollama 翻译冒烟
-- [x] OpenScholar 检索接入与回退路径
-- [x] 批量索引 API + 文献库 UI
-- [x] 固定从 **`apps/api/.env`** 加载配置（与启动 cwd 无关）
-- [x] 设置 API/UI：路径相对仓库根展示、`.env` 生效说明
-- [x] 文献库 **parse/index 状态**与磁盘/chunks 校准
-- [~] **`DATA_DIR` 行为**文档化（README 有说明；可选进一步锚定到仓库根 `data/`）
-- [ ] **索引 / 扫描** fixture 集成测试（mock LLM）
-- [ ] **错误面**：LLM/嵌入/Ollama/OpenScholar 不可用时的统一 JSON 与前端提示
-- [ ] **文献库 UX**：索引进度、失败重试、解析预览（`document.md` 片段）
-- [ ] **CI**：`pnpm test`（无 Ollama 跳过集成）
+| 任务 | 状态 |
+|------|------|
+| 统一错误 JSON（LLM / MinerU / OpenScholar / 无 document.md） | `[ ]` |
+| 文献库：parse/index 失败原因、重试、仅重建索引 | `[~]` 状态字段有，失败原因与预览弱 |
+| document.md / chunk 预览 | `[ ]` |
+| 最小回归集 fixture（3 英 + 3 中 + 扫描 + 公式 + 图表） | `[ ]` 见 [docs/QUALITY_BASELINE.md](./docs/QUALITY_BASELINE.md) |
+| CI：`pnpm test` 默认绿，Ollama/MinerU 标 optional | `[ ]` |
 
-**验收**：README 流程「扫描 → 索引 1 篇 → 问答（含流式）」可完成；`pnpm test` 默认全绿。
+**验收**：不启 Ollama 时 API 返回明确 JSON；`pnpm test` 默认通过。
 
 ---
 
-## Phase 1 — Zotero 题录（2–4 周）
+## P1 — 解析质量
 
-- [x] 只读 **`zotero.sqlite`** → `papers`（标题、作者、年份、期刊、DOI、标签、集合）
-- [x] 文献库展示题录（作者、年份、venue、DOI、标签、集合）
-- [x] 扫描磁盘后自动尝试题录同步；手动 `POST /papers/sync-zotero-metadata`
-- [~] **按标签/年份/集合筛选**（当前为统一 `q` 模糊搜索，含上述字段，无独立筛选项）
-- [ ] PDF 与 Zotero item 稳定关联；多附件策略文档化
+**目标**：`document.md` 可信、可评分、可修复。
 
-**验收**：题录与 Zotero 一致；扫描增量仍正确。
+| 任务 | 状态 |
+|------|------|
+| `parse_reports` 表 + `parse_quality_score` | `[ ]` |
+| 统计：页数、章节、公式/表/图、OCR 比例、乱码比例 | `[ ]` |
+| Markdown 清洗（页眉页脚、断行、参考文献区） | `[ ]` |
+| 前端：section tree、质量分、警告、低质量筛选 | `[ ]` |
+| 低分重试（cloud / OCR） | `[ ]` |
 
----
-
-## Phase 2 — 检索质量（3–6 周）
-
-**部分已有**：FTS + OpenScholar dense + RRF + Reranker；`scholar_embedding_json` 存 SQLite。
-
-**待做**：
-
-- [ ] **LanceDB / Qdrant** 向量持久化（替代全表 dense 扫描）
-- [ ] **嵌入抽象**：`bge-m3` 等可切换，维度归一化统一
-- [ ] **融合调参**、跨篇配额、chunk 去重
-- [ ] **批量「仅补未 indexed」** API
-
-**验收**：千级 chunk 延迟可接受；引用相关性优于纯 FTS。
+**验收**：可筛低质量 PDF；`force` 不覆盖更高分结果。
 
 ---
 
-## Phase 3 — 异步管线（2–4 周）
+## P2 — Chunk 质量
 
-- [ ] 任务队列：`parse` / `index` / `reindex-all`
-- [ ] Worker 与 API 分离；MinerU/嵌入并发限制
-- [ ] 进度 SSE/WebSocket
-- [ ] 结构化日志 / 可选 OpenTelemetry
+**目标**：chunk 为可引用、可检索、可综合的知识单元。
 
-**验收**：全库重建不拖死 API；前端可见队列与失败原因。
+| 任务 | 状态 |
+|------|------|
+| `chunk_type`（abstract / theorem / proof / references …） | `[ ]` |
+| `chunk_quality_score`、`content_hash` | `[ ]` |
+| `section_path` 结构化（JSON 路径） | `[~]` 已有字符串 `section_path` |
+| Chunk 去重（页眉页脚、切片重复） | `[ ]` |
+| references-only 不参与普通问答 | `[ ]` |
+| 前端：chunk 来源（标题 + section + 页码） | `[~]` 引用卡片有部分字段 |
 
----
-
-## Phase 4 — 综述深化（持续）
-
-**已完成**
-
-- [x] 引用式提示、`build_citation_prompt`
-- [x] 流式问答 + 可选双语答案（`BILINGUAL_ANSWER`）
-- [x] Markdown/KaTeX
-- [x] OpenScholar-8B 经 `OLLAMA_CHAT_MODEL` 切换
-
-**待做**
-
-- [ ] 综述模板（快速 / 结构化 / 对比 / 申请书）
-- [ ] 综述双语（与问答一致的 `review_other` / 流式）
-- [ ] 导出 Markdown / DOCX；引用表与 chunk 链接
-- [ ] `summaries` 表落地，综述先聚合摘要
-- [ ] 无证据不断言、引用与 `chunk_id` 对齐校验
-- [ ] 针对 OpenScholar-8B 的英文 system 模板调优
+**验收**：同段不重复进 top-k；定理类可单独检索。
 
 ---
 
-## Phase 5 — 外部源与深度集成（中长期）
+## P3 — 检索质量
 
-- [ ] Semantic Scholar / OpenAlex / Crossref（DOI 补全，注意条款）
-- [ ] **vLLM / Transformers** 直连 OpenScholar-8B（不经 Ollama）
-- [ ] ScholarQA 式评测与回归集
-- [ ] 魔搭/HF 一键下载脚本维护
-- [ ] Mano-P / Cider 等 GUI 自动化（可选）
+**目标**：检索准、覆盖全、跨文献均衡。
 
-> **说明**：OpenScholar **Retriever/Reranker** 已在主线实现（Phase 2 子集）；Phase 5 侧重生成侧直连、外部文献源与评测。
+| 任务 | 状态 |
+|------|------|
+| 跨篇配额 `RETRIEVE_MAX_CHUNKS_PER_PAPER` | `[x]` |
+| 最多文献数 `RETRIEVE_MAX_PAPERS` | `[x]` |
+| Chunk 内容去重（检索结果级） | `[ ]` |
+| 查询扩展 / 专名同义词 | `[~]` 双语 Hy-MT 扩展已有 |
+| `eval_queries.jsonl` + 评测脚本 | `[ ]` |
+| LanceDB 替代 SQLite 全表 dense 扫描 | `[ ]` |
+| `POST /papers/index-missing` | `[ ]` |
 
----
-
-## 建议优先级
-
-1. **Phase 0 剩余**（CI、错误面、文献库 UX）  
-2. **Phase 1 收尾**（标签/集合独立筛选、多附件策略）  
-3. **Phase 2**（向量库 + 仅补未索引批量）— 与 PDF 量增长并行  
-4. **Phase 3** — PDF 明显增多时  
-5. **Phase 4 / 5** — 按需迭代  
-
-主对话已可通过 **`OLLAMA_CHAT_MODEL`** 使用 OpenScholar-8B GGUF；检索已可选官方 Retriever/Reranker。
+**验收**：top-k 不被单篇垄断；评测集可回归。
 
 ---
 
-## 模型速查
+## P4 — 引用可靠性
 
-| 用途 | 推荐 | 配置 |
-|------|------|------|
-| 主对话 | OpenScholar-8B GGUF 或 qwen 等 | `OLLAMA_CHAT_MODEL` |
-| 检索稠密/精排 | OpenScholar Retriever / Reranker | `OPENSCHOLAR_*_ENABLED` |
-| 嵌入（回退） | `nomic-embed-text` 等 | `OLLAMA_EMBED_MODEL` |
-| 双语翻译 | Hy-MT Q4_K_M GGUF | `TRANSLATION_OLLAMA_MODEL` |
+**目标**：关键判断有证据，证据支持判断。
 
-详见 README「模型与检索」。
+| 任务 | 状态 |
+|------|------|
+| Evidence locking（`[CHUNK:id]`） | `[~]` prompt 含 chunk_id，未强制对齐 |
+| `CitationVerifier`（存在性、关键词、无引用断言） | `[ ]` |
+| `answer_citations` 表 + claim 拆分 | `[ ]` |
+| 无证据固定降级话术 | `[~]` prompt 要求，无结构化校验 |
+| 前端：verified / insufficient 状态 | `[ ]` |
+
+**验收**：每个关键论断可点开 chunk；无证据不编造。
+
+---
+
+## P5 — 综述结构模板
+
+**目标**：科研写作辅助（综述 + 申请书）。
+
+| 模板 | 状态 |
+|------|------|
+| A. 快速综述 | `[ ]` |
+| B. 结构化综述（研究现状） | `[~]` 当前单一综述 prompt |
+| C. 对比综述（表格） | `[ ]` |
+| D. 项目申请书（现状 / 科学问题 / 切入点 / 创新性） | `[ ]` |
+| `summaries` 表参与综述（先 summary 再 chunk） | `[ ]` |
+| 按标签 / 集合 / 年份限定文献范围 | `[~]` 检索仍全库，题录筛选弱 |
+| 导出 Markdown / DOCX | `[ ]` |
+
+**验收**：一键出申请书「研究现状」初稿；段段有 `[n]`；可导出。
+
+---
+
+## P6 — 异步与规模化
+
+文献量显著增大（建议 >200 篇）后再优先。
+
+| 任务 | 状态 |
+|------|------|
+| SQLite task queue + Worker | `[ ]` `tasks` 表已有 |
+| 进度 SSE / WebSocket | `[ ]` |
+| `parse-missing` / `index-missing` / `summarize-missing` | `[ ]` |
+| MinerU / 嵌入并发限制（M4 24G） | `[ ]` |
+
+---
+
+## P7 — 明确延后
+
+- Mano-P / Cider GUI 自动化  
+- ScholarQA 大规模评测、外部 Semantic Scholar / OpenAlex  
+- Transformers 直连 OpenScholar-8B（Ollama 够用）  
+- 多用户、shadcn 全面换皮  
+
+---
+
+## 优先级（执行顺序）
+
+```text
+P0  错误面 + 文献库 UX + 测试基线
+P1  解析质量评分 + Markdown 预览
+P2  chunk 类型、去重、references 过滤
+P3  检索调参 + 评测集（配额已起步）→ LanceDB
+P4  citation verifier + no-evidence-no-claim
+P5  四类综述模板 + summaries + 导出
+P6  异步队列 + 进度
+P7  外部源与实验性功能
+```
+
+---
+
+## 模块命名（实现参考）
+
+```text
+SourceManager      # Zotero PDF + sqlite
+ParseManager       # MinerU + parse_reports
+CleanMarkdown      # 清洗
+ChunkManager       # 分块与类型
+EmbeddingManager   # 向量
+RetrievalManager   # FTS + dense + RRF + quota
+EvidenceManager    # 证据锁定
+CitationVerifier   # 引用校验
+SummaryManager     # 论文摘要
+ReviewWriter       # 综述生成
+ExportManager      # Markdown / DOCX
+TaskManager        # 后台任务
+```
 
 ---
 
 ## 文档维护
 
-更新实现时请同步：
+变更实现时请同步：
 
-- 本文件对应阶段的 **`[x]` / `[ ]` / `[~]`** 与「当前能力」表  
-- `README.md` 的功能表、API 表与配置说明  
+- 本文件对应阶段的 `[x]` / `[ ]` / `[~]`  
+- `README.md` 功能表与配置项（新增 `RETRIEVE_MAX_*` 等）  
+- `docs/QUALITY_BASELINE.md` 回归集与评测查询  
