@@ -11,6 +11,12 @@ from app.config import settings
 from app.db import get_db
 from app.pipeline_logging import clip, plog_debug, plog_info
 from app.services.chunker import cosine_sim
+from app.services.retrieval_scope import (
+    RetrievalScope,
+    chunk_type_sql_exclude,
+    paper_id_filter_sql,
+    resolve_paper_ids,
+)
 
 
 def retrieve_limits() -> tuple[int, int]:
@@ -180,25 +186,38 @@ def _atomic_search_tokens(query: str, max_tokens: int = 24) -> list[str]:
     return out
 
 
-def fts_retrieve(conn: sqlite3.Connection, query: str, limit: int = 40) -> list[dict]:
+def fts_retrieve(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 40,
+    *,
+    allowed_paper_ids: set[str] | None = None,
+    exclude_chunk_types: list[str] | None = None,
+) -> list[dict]:
     tokens = _atomic_search_tokens(query)
     if not tokens:
         plog_info("retrieve", "fts 无检索词（query 过短或仅停用词） preview=%s", clip(query, 120))
+        return []
+    if allowed_paper_ids is not None and not allowed_paper_ids:
         return []
 
     match = " OR ".join(tokens)
     plog_info("retrieve", "fts MATCH tokens=%s 条 match预览=%s", len(tokens), clip(match, 200))
     plog_debug("retrieve", "fts token 列表: %s", tokens)
-    sql = """
+    paper_sql, paper_params = paper_id_filter_sql(allowed_paper_ids, alias="p")
+    chunk_sql, chunk_params = chunk_type_sql_exclude(exclude_chunk_types)
+    sql = f"""
     SELECT c.chunk_id, c.paper_id, c.body,
            bm25(chunks_fts) AS rank
     FROM chunks_fts c
-    WHERE chunks_fts MATCH ?
+    JOIN chunks ch ON ch.id = c.chunk_id
+    JOIN papers p ON p.id = ch.paper_id AND p.deleted = 0
+    WHERE chunks_fts MATCH ?{paper_sql}{chunk_sql}
     ORDER BY rank
     LIMIT ?
     """
     try:
-        rows = conn.execute(sql, (match, limit)).fetchall()
+        rows = conn.execute(sql, (match, *paper_params, *chunk_params, limit)).fetchall()
     except sqlite3.OperationalError as e:
         plog_info("retrieve", "fts MATCH 异常，将 LIKE 回退: %s", e)
         rows = []
@@ -211,13 +230,24 @@ def fts_retrieve(conn: sqlite3.Connection, query: str, limit: int = 40) -> list[
         ]
 
     plog_info("retrieve", "fts 零命中，使用 LIKE 回退")
-    out = _like_fallback_chunks(conn, tokens, limit)
+    out = _like_fallback_chunks(
+        conn, tokens, limit, allowed_paper_ids=allowed_paper_ids, exclude_chunk_types=exclude_chunk_types
+    )
     plog_info("retrieve", "LIKE 回退 命中=%s", len(out))
     return out
 
 
-def _like_fallback_chunks(conn: sqlite3.Connection, tokens: list[str], limit: int) -> list[dict]:
+def _like_fallback_chunks(
+    conn: sqlite3.Connection,
+    tokens: list[str],
+    limit: int,
+    *,
+    allowed_paper_ids: set[str] | None = None,
+    exclude_chunk_types: list[str] | None = None,
+) -> list[dict]:
     if not tokens:
+        return []
+    if allowed_paper_ids is not None and not allowed_paper_ids:
         return []
     tokens_sorted = sorted(set(tokens), key=len, reverse=True)[:8]
     conds: list[str] = []
@@ -226,13 +256,17 @@ def _like_fallback_chunks(conn: sqlite3.Connection, tokens: list[str], limit: in
         conds.append("lower(ch.text) LIKE ?")
         params.append(f"%{t.lower()}%")
     where_sql = " OR ".join(conds)
+    paper_sql, paper_params = paper_id_filter_sql(allowed_paper_ids, alias="p")
+    chunk_sql, chunk_params = chunk_type_sql_exclude(exclude_chunk_types)
     sql = f"""
     SELECT ch.id AS chunk_id, ch.paper_id, ch.text AS body, 0.0 AS rank
     FROM chunks ch
     JOIN papers p ON p.id = ch.paper_id AND p.deleted = 0
-    WHERE ({where_sql})
+    WHERE ({where_sql}){paper_sql}{chunk_sql}
     LIMIT ?
     """
+    params.extend(paper_params)
+    params.extend(chunk_params)
     params.append(limit)
     try:
         rows = conn.execute(sql, params).fetchall()
@@ -250,6 +284,8 @@ def fts_retrieve_merge(
     *,
     limit_per: int,
     merged_cap: int,
+    allowed_paper_ids: set[str] | None = None,
+    exclude_chunk_types: list[str] | None = None,
 ) -> list[dict]:
     best: dict[str, dict] = {}
     seen_q: set[str] = set()
@@ -261,7 +297,13 @@ def fts_retrieve_merge(
         if lk in seen_q:
             continue
         seen_q.add(lk)
-        for h in fts_retrieve(conn, s, limit=limit_per):
+        for h in fts_retrieve(
+            conn,
+            s,
+            limit=limit_per,
+            allowed_paper_ids=allowed_paper_ids,
+            exclude_chunk_types=exclude_chunk_types,
+        ):
             cid = str(h["chunk_id"])
             r = float(h.get("fts_rank") or 0.0)
             old = best.get(cid)
@@ -279,7 +321,7 @@ def hydrate_chunks(conn: sqlite3.Connection, hits: list[dict]) -> list[dict]:
     rows = conn.execute(
         f"""
         SELECT ch.id, ch.paper_id, ch.section_title, ch.section_path, ch.page_start, ch.page_end,
-               ch.text, ch.embedding_json, ch.scholar_embedding_json,
+               ch.text, ch.embedding_json, ch.scholar_embedding_json, ch.chunk_type,
                p.title AS paper_title
         FROM chunks ch
         JOIN papers p ON p.id = ch.paper_id
@@ -304,10 +346,20 @@ def hydrate_chunks(conn: sqlite3.Connection, hits: list[dict]) -> list[dict]:
                 "text": row["text"],
                 "embedding_json": row["embedding_json"],
                 "scholar_embedding_json": row.get("scholar_embedding_json"),
+                "chunk_type": row.get("chunk_type"),
                 "fts_rank": h.get("fts_rank"),
             }
         )
     return ordered
+
+
+def _scope_kwargs(scope: RetrievalScope | None) -> tuple[set[str] | None, list[str] | None]:
+    if scope is None:
+        return None, None
+    with get_db() as conn:
+        allowed = resolve_paper_ids(conn, scope)
+    exclude = scope.exclude_chunk_types or None
+    return allowed, exclude
 
 
 def rrf_merge_ranked_lists(ranked_ids: list[list[str]], *, k: int = 60) -> list[str]:
@@ -365,16 +417,23 @@ def _dense_retrieve_all_scholar(
     query_vec: list[float],
     *,
     limit: int,
+    allowed_paper_ids: set[str] | None = None,
+    exclude_chunk_types: list[str] | None = None,
 ) -> list[str]:
     from app.services.openscholar_retrieval import parse_stored_embedding
 
+    if allowed_paper_ids is not None and not allowed_paper_ids:
+        return []
+    paper_sql, paper_params = paper_id_filter_sql(allowed_paper_ids, alias="p")
+    chunk_sql, chunk_params = chunk_type_sql_exclude(exclude_chunk_types)
     rows = conn.execute(
-        """
+        f"""
         SELECT ch.id, ch.scholar_embedding_json
         FROM chunks ch
         JOIN papers p ON p.id = ch.paper_id AND p.deleted = 0
-        WHERE ch.scholar_embedding_json IS NOT NULL
-        """
+        WHERE ch.scholar_embedding_json IS NOT NULL{paper_sql}{chunk_sql}
+        """,
+        (*paper_params, *chunk_params),
     ).fetchall()
     scored: list[tuple[float, str]] = []
     for r in rows:
@@ -443,6 +502,7 @@ def _openscholar_retrieve_sync(
     *,
     top_k_fts: int,
     top_k_final: int,
+    scope: RetrievalScope | None = None,
 ) -> list[dict]:
     from app.services.openscholar_retrieval import (
         encode_queries,
@@ -469,19 +529,33 @@ def _openscholar_retrieve_sync(
         plog_info("retrieve", "OpenScholar Retriever 编码 query 失败: %s", e)
         return []
 
+    allowed, exclude_types = _scope_kwargs(scope)
     with get_db() as conn:
+        if allowed is None and scope is not None:
+            allowed = resolve_paper_ids(conn, scope)
         if len(queries) == 1:
-            fts_hits = fts_retrieve(conn, queries[0], limit=top_k_fts)
+            fts_hits = fts_retrieve(
+                conn, queries[0], limit=top_k_fts, allowed_paper_ids=allowed, exclude_chunk_types=exclude_types
+            )
         else:
             per = max(10, top_k_fts // len(queries))
-            fts_hits = fts_retrieve_merge(conn, queries, limit_per=per, merged_cap=top_k_fts)
+            fts_hits = fts_retrieve_merge(
+                conn,
+                queries,
+                limit_per=per,
+                merged_cap=top_k_fts,
+                allowed_paper_ids=allowed,
+                exclude_chunk_types=exclude_types,
+            )
         candidates = hydrate_chunks(conn, fts_hits)
 
         fts_order = [str(c["chunk_id"]) for c in candidates]
         ranked_lists: list[list[str]] = [fts_order] if fts_order else []
 
         if use_retriever and query_vec:
-            dense_from_db = _dense_retrieve_all_scholar(conn, query_vec, limit=top_k_fts)
+            dense_from_db = _dense_retrieve_all_scholar(
+                conn, query_vec, limit=top_k_fts, allowed_paper_ids=allowed, exclude_chunk_types=exclude_types
+            )
             if dense_from_db:
                 ranked_lists.append(dense_from_db)
                 plog_info("retrieve", "OpenScholar 全库 dense 召回=%s", len(dense_from_db))
@@ -521,7 +595,9 @@ def _openscholar_retrieve_sync(
             candidates = [by_id[cid] for cid in merged_ids if cid in by_id]
             plog_info("retrieve", "RRF 合并后候选=%s", len(candidates))
         elif not candidates and use_retriever and query_vec:
-            dense_ids = _dense_retrieve_all_scholar(conn, query_vec, limit=top_k_fts)
+            dense_ids = _dense_retrieve_all_scholar(
+                conn, query_vec, limit=top_k_fts, allowed_paper_ids=allowed, exclude_chunk_types=exclude_types
+            )
             if dense_ids:
                 placeholders = ",".join("?" * len(dense_ids))
                 rows = conn.execute(
@@ -574,6 +650,9 @@ async def retrieve_for_query(
     top_k_final: int = 8,
     query_vec: list[float] | None = None,
     extra_queries: list[str] | None = None,
+    scope: RetrievalScope | None = None,
+    *,
+    include_references: bool = False,
 ) -> list[dict]:
     t0 = time.monotonic()
     queries: list[str] = [query.strip()]
@@ -592,6 +671,18 @@ async def retrieve_for_query(
 
     from app.services.openscholar_retrieval import openscholar_reranker_enabled, openscholar_retriever_enabled
 
+    if scope is None and not include_references:
+        scope = RetrievalScope(exclude_chunk_types=["references"])
+    elif scope is not None and include_references:
+        scope = RetrievalScope(
+            paper_ids=scope.paper_ids,
+            tags_any=scope.tags_any,
+            collections_any=scope.collections_any,
+            years_min=scope.years_min,
+            years_max=scope.years_max,
+            exclude_chunk_types=[],
+        )
+
     use_os = openscholar_retriever_enabled() or openscholar_reranker_enabled()
     if use_os:
         plog_info(
@@ -607,6 +698,7 @@ async def retrieve_for_query(
                 queries,
                 top_k_fts=top_k_fts,
                 top_k_final=top_k_final,
+                scope=scope,
             )
             if top:
                 top = _finalize_retrieval(top, top_k_final)
@@ -620,12 +712,24 @@ async def retrieve_for_query(
         except Exception as e:
             plog_info("retrieve", "OpenScholar 流水线异常，回退 FTS/嵌入: %s", e)
 
+    allowed, exclude_types = _scope_kwargs(scope)
     with get_db() as conn:
+        if allowed is None and scope is not None:
+            allowed = resolve_paper_ids(conn, scope)
         if len(queries) == 1:
-            fts_hits = fts_retrieve(conn, queries[0], limit=top_k_fts)
+            fts_hits = fts_retrieve(
+                conn, queries[0], limit=top_k_fts, allowed_paper_ids=allowed, exclude_chunk_types=exclude_types
+            )
         else:
             per = max(10, top_k_fts // len(queries))
-            fts_hits = fts_retrieve_merge(conn, queries, limit_per=per, merged_cap=top_k_fts)
+            fts_hits = fts_retrieve_merge(
+                conn,
+                queries,
+                limit_per=per,
+                merged_cap=top_k_fts,
+                allowed_paper_ids=allowed,
+                exclude_chunk_types=exclude_types,
+            )
         candidates = hydrate_chunks(conn, fts_hits)
     plog_info(
         "retrieve",
