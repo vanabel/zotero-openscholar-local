@@ -1,0 +1,155 @@
+[
+  {
+    "id": "fixture-en-math-01",
+    "kind": "en-math-formulas",
+    "source": "excerpt: Andrews multi-point maximum principles",
+    "min_chunks": 2,
+    "section_paths_contain": [
+      "Introductory"
+    ],
+    "fts": [
+      {
+        "query": "multi-point maximum principle",
+        "min_hits": 1,
+        "body_contains": "maximum"
+      }
+    ]
+  },
+  {
+    "id": "fixture-en-math-02",
+    "kind": "en-math-theorems",
+    "source": "excerpt: Grigor'yan integral maximum principle",
+    "min_chunks": 3,
+    "section_paths_contain": [
+      "Introduction"
+    ],
+    "text_must_include": [
+      "Theorem 1",
+      "integral maximum principle"
+    ],
+    "fts": [
+      {
+        "query": "heat kernel Dirichlet",
+        "min_hits": 1,
+        "body_contains": "heat"
+      }
+    ]
+  },
+  {
+    "id": "fixture-en-math-03",
+    "kind": "en-math-standard",
+    "source": "excerpt: Lu & Sleeman parabolic systems",
+    "min_chunks": 2,
+    "section_paths_contain": [
+      "Synopsis"
+    ],
+    "fts": [
+      {
+        "query": "semilinear parabolic comparison theorem",
+        "min_hits": 1,
+        "body_contains": "parabolic"
+      }
+    ]
+  },
+  {
+    "id": "fixture-scan-01",
+    "kind": "scan-ocr-pages",
+    "source": "excerpt: Maximum Entropy book (Page markers)",
+    "min_chunks": 2,
+    "section_paths_contain": [
+      "Page 15"
+    ],
+    "text_must_include": [
+      "Table 1"
+    ],
+    "fts": [
+      {
+        "query": "Levy-Khinchin MassInf",
+        "min_hits": 1,
+        "body_contains": "MassInf"
+      }
+    ]
+  },
+  {
+    "id": "fixture-table-01",
+    "kind": "tables-figures",
+    "source": "excerpt: Table 1 and Figure 1 captions",
+    "min_chunks": 2,
+    "text_must_include": [
+      "Table 1",
+      "Figure 1"
+    ],
+    "fts": [
+      {
+        "query": "Table 1 Levy-Khinchin",
+        "min_hits": 1,
+        "body_contains": "Table"
+      }
+    ]
+  },
+  {
+    "id": "fixture-zh-01",
+    "kind": "zh-journal",
+    "source": "synthetic Chinese journal excerpt",
+    "min_chunks": 2,
+    "section_paths_contain": [
+      "摘要",
+      "引言"
+    ],
+    "text_must_include": [
+      "能量恒等式",
+      "Lorentz"
+    ],
+    "fts": [
+      {
+        "query": "能量恒等式 抛物",
+        "min_hits": 1,
+        "body_contains": "能量"
+      }
+    ]
+  },
+  {
+    "id": "fixture-zh-02",
+    "kind": "zh-multicolumn",
+    "source": "synthetic multi-column OCR layout",
+    "min_chunks": 2,
+    "section_paths_contain": [
+      "左栏",
+      "右栏"
+    ],
+    "text_must_include": [
+      "调和映射",
+      "能量恒等式"
+    ],
+    "fts": [
+      {
+        "query": "阅读顺序 调和映射",
+        "min_hits": 1,
+        "body_contains": "调和"
+      }
+    ]
+  },
+  {
+    "id": "fixture-zh-03",
+    "kind": "zh-review",
+    "source": "synthetic review outline",
+    "min_chunks": 3,
+    "section_paths_contain": [
+      "研究背景",
+      "主要进展",
+      "展望",
+      "参考文献"
+    ],
+    "text_must_include": [
+      "Protter",
+      "Lorentz"
+    ],
+    "fts": [
+      {
+        "query": "研究进展 抛物 展望",
+        "min_hits": 1,
+        "body_contains": "未来"
+      }
+    ]
+  }
+]

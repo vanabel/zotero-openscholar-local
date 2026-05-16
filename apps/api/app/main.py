@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db import init_db
 from app.pipeline_logging import plog_info, setup_logging
-from app.routers import chat, chunks, health, papers, review, scan, settings_route, stats
+from app.routers import chat, chunks, health, papers, review, scan, settings_route, stats, tasks
+from app.services.task_queue import start_worker, stop_worker
 
 
 def _log_openscholar_startup() -> None:
@@ -42,7 +43,9 @@ async def lifespan(app: FastAPI):
     setup_logging()
     init_db()
     _log_openscholar_startup()
+    start_worker()
     yield
+    await stop_worker()
 
 
 app = FastAPI(
@@ -71,3 +74,4 @@ app.include_router(chat.router)
 app.include_router(review.router)
 app.include_router(settings_route.router)
 app.include_router(stats.router)
+app.include_router(tasks.router)

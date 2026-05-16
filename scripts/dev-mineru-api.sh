@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 随 pnpm dev / npm run dev 启动 mineru-api；与 apps/api/.env 中 MINERU_CLI、MINERU_API_URL 对齐。
+# 随 pnpm dev / npm run dev 启动 mineru-api（仅 MINERU_MODE=cli 时需要）。
+# cloud 模式走 mineru.net，不依赖本机 mineru / mineru-api。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,6 +20,17 @@ get_env_val() {
   val="${val%\'}"
   printf '%s' "$val"
 }
+
+MINERU_MODE_VAL="${MINERU_MODE:-}"
+if [[ -z "$MINERU_MODE_VAL" ]]; then
+  MINERU_MODE_VAL="$(get_env_val MINERU_MODE "$ENV_FILE" 2>/dev/null || true)"
+fi
+MINERU_MODE_VAL="$(printf '%s' "${MINERU_MODE_VAL:-cli}" | tr '[:upper:]' '[:lower:]')"
+if [[ "$MINERU_MODE_VAL" == "cloud" ]]; then
+  echo "dev-mineru-api: MINERU_MODE=cloud，跳过本机 mineru-api（PDF 解析走 mineru.net）" >&2
+  # concurrently -k 会在任一子进程退出时结束其余进程，此处需保持存活
+  exec tail -f /dev/null
+fi
 
 MINERU_CLI_VAL="${MINERU_CLI:-}"
 if [[ -z "$MINERU_CLI_VAL" ]]; then

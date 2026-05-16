@@ -18,6 +18,7 @@ from app.services.pdf_parse import (
     parsed_pdf_sha256,
     sha256_text,
 )
+from app.services.task_queue import TaskProgress
 from app.services.zotero_scanner import get_paper
 
 
@@ -35,7 +36,13 @@ def _chunk_count(paper_id: str) -> int:
         return int(row["c"]) if row else 0
 
 
-async def index_paper(paper_id: str, force: bool = False, *, reindex_only: bool = False) -> dict:
+async def index_paper(
+    paper_id: str,
+    force: bool = False,
+    *,
+    reindex_only: bool = False,
+    progress: TaskProgress | None = None,
+) -> dict:
     t0 = time.monotonic()
     plog_info(
         "index",
@@ -87,13 +94,18 @@ async def index_paper(paper_id: str, force: bool = False, *, reindex_only: bool 
         if force:
             cleared = clear_parsed_output_dir(out_dir)
             plog_info("index", "强制重建：已清空解析缓存目录 %s（%s 项）", out_dir, cleared)
-        md, meta = parse_one(
+        if progress:
+            progress.update("parse", 0, 1, "MinerU 解析中…")
+        md, meta = await asyncio.to_thread(
+            parse_one,
             paper_id,
             pdf_path,
             out_dir,
             force_reparse=force,
             pdf_sha256=(pdf_sha.strip() or None) if pdf_sha else None,
         )
+        if progress:
+            progress.update("parse", 1, 1, "解析完成")
         meta["pdf_sha256"] = pdf_sha
         (out_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         md_hash = sha256_text(md)
@@ -152,6 +164,11 @@ async def index_paper(paper_id: str, force: bool = False, *, reindex_only: bool 
     ):
         reused_index = True
         plog_info("index", "复用已有分块与嵌入，跳过重建 paper_id=%s chunks=%s", paper_id, _chunk_count(paper_id))
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE papers SET index_status='indexed', updated_at=? WHERE id=?",
+                (_utc_now(), paper_id),
+            )
         return {
             "ok": True,
             "paper_id": paper_id,
@@ -163,14 +180,22 @@ async def index_paper(paper_id: str, force: bool = False, *, reindex_only: bool 
             "elapsed_sec": round(time.monotonic() - t0, 2),
         }
 
+    if progress:
+        progress.update("chunk", 0, 1, "分块中…")
     drafts = chunk_markdown(md)
+    if progress:
+        progress.update("chunk", 1, 1, f"共 {len(drafts)} 个片段")
     embed_client = EmbeddingClient()
     texts = [d.text for d in drafts]
 
     embeddings: list[list[float] | None] = [None] * len(texts)
     batch = 8
-    for i in range(0, len(texts), batch):
+    n_texts = len(texts)
+    for i in range(0, n_texts, batch):
         slice_t = texts[i : i + batch]
+        done = min(i + len(slice_t), n_texts)
+        if progress:
+            progress.update("embed", done, n_texts)
         try:
             vecs = await embed_client.embed(slice_t)
             for j, v in enumerate(vecs):
@@ -193,6 +218,9 @@ async def index_paper(paper_id: str, force: bool = False, *, reindex_only: bool 
 
             for i in range(0, len(texts), sb):
                 slice_t = texts[i : i + sb]
+                done = min(i + len(slice_t), len(texts))
+                if progress:
+                    progress.update("scholar_embed", done, len(texts))
                 vecs = await asyncio.to_thread(_encode_scholar_batch, slice_t)
                 for j, v in enumerate(vecs):
                     scholar_embeddings[i + j] = v
@@ -206,6 +234,8 @@ async def index_paper(paper_id: str, force: bool = False, *, reindex_only: bool 
                 sum(1 for e in scholar_embeddings if e is not None),
             )
 
+    if progress:
+        progress.update("save", 0, 1, "写入数据库…")
     with get_db() as conn:
         conn.execute("DELETE FROM chunks WHERE paper_id = ?", (paper_id,))
         conn.execute("DELETE FROM chunks_fts WHERE paper_id = ?", (paper_id,))
@@ -248,6 +278,8 @@ async def index_paper(paper_id: str, force: bool = False, *, reindex_only: bool 
             """,
             (md_hash, _utc_now(), paper_id),
         )
+    if progress:
+        progress.update("save", 1, 1, "完成")
 
     scholar_ok = sum(1 for e in scholar_embeddings if e is not None)
     plog_info(

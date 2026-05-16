@@ -17,19 +17,48 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _use_openai_chat() -> bool:
+    return settings.resolved_chat_provider() == "openai"
+
+
+def _use_openai_embed() -> bool:
+    return settings.resolved_embed_provider() == "openai"
+
+
+def _require_openai(capability: str) -> None:
+    if not settings.openai_ready():
+        raise RuntimeError(
+            f"{capability} 使用 OpenAI 兼容 API 需要配置 OPENAI_API_BASE 与 OPENAI_API_KEY，"
+            "或将 CHAT_PROVIDER / EMBED_PROVIDER 设为 ollama。"
+        )
+
+
 def chat_model_id() -> str:
-    if settings.openai_api_key and settings.openai_api_base:
+    if _use_openai_chat():
         return f"openai:{settings.openai_chat_model}"
     return f"ollama:{settings.ollama_chat_model}"
 
 
+def embed_model_id() -> str:
+    if _use_openai_embed():
+        return f"openai:{settings.openai_embed_model}"
+    return f"ollama:{settings.ollama_embed_model}"
+
+
 class LLMClient:
     async def chat(self, messages: list[dict[str, str]], temperature: float = 0.2) -> str:
-        use_openai = bool(settings.openai_api_key and settings.openai_api_base)
-        plog_info("llm", "chat 开始 provider=%s model=%s temp=%s", "openai" if use_openai else "ollama", settings.openai_chat_model if use_openai else settings.ollama_chat_model, temperature)
+        use_openai = _use_openai_chat()
+        plog_info(
+            "llm",
+            "chat 开始 provider=%s model=%s temp=%s",
+            "openai" if use_openai else "ollama",
+            settings.openai_chat_model if use_openai else settings.ollama_chat_model,
+            temperature,
+        )
         plog_debug("llm", "chat messages 条数=%s 总字符约=%s", len(messages), sum(len(m.get("content") or "") for m in messages))
         t0 = time.monotonic()
         if use_openai:
+            _require_openai("对话")
             base = settings.openai_api_base.rstrip("/")
             url = f"{base}/chat/completions"
             headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
@@ -65,11 +94,12 @@ class LLMClient:
 
     async def chat_stream(self, messages: list[dict[str, str]], temperature: float = 0.2) -> AsyncIterator[str]:
         """流式输出模型增量文本（OpenAI / Ollama）。"""
-        use_openai = bool(settings.openai_api_key and settings.openai_api_base)
+        use_openai = _use_openai_chat()
         plog_info("llm", "chat_stream 开始 provider=%s", "openai" if use_openai else "ollama")
         t0 = time.monotonic()
         nchars = 0
-        if settings.openai_api_key and settings.openai_api_base:
+        if use_openai:
+            _require_openai("对话流式")
             base = settings.openai_api_base.rstrip("/")
             url = f"{base}/chat/completions"
             headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
@@ -136,17 +166,18 @@ class EmbeddingClient:
         if not texts:
             return []
 
-        if settings.openai_api_key and settings.openai_api_base:
+        if _use_openai_embed():
+            _require_openai("嵌入")
             base = settings.openai_api_base.rstrip("/")
             url = f"{base}/embeddings"
             headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
-            # OpenAI embeddings API
-            plog_info("embed", "embed 开始 provider=openai 条数=%s", len(texts))
+            model = settings.openai_embed_model
+            plog_info("embed", "embed 开始 provider=openai model=%s 条数=%s", model, len(texts))
             t0 = time.monotonic()
             async with httpx.AsyncClient(timeout=120.0) as client:
                 vecs: list[list[float]] = []
                 for t in texts:
-                    payload = {"model": "text-embedding-3-small", "input": t}
+                    payload = {"model": model, "input": t}
                     r = await client.post(url, headers=headers, json=payload)
                     r.raise_for_status()
                     data = r.json()

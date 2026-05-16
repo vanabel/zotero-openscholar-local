@@ -1,0 +1,15 @@
+{
+  "id": "fixture-scan-01",
+  "kind": "scan-ocr-pages",
+  "source": "excerpt: Maximum Entropy book (Page markers)",
+  "min_chunks": 2,
+  "section_paths_contain": ["Page 15"],
+  "text_must_include": ["Table 1"],
+  "fts": [
+    {
+      "query": "Levy-Khinchin MassInf",
+      "min_hits": 1,
+      "body_contains": "MassInf"
+    }
+  ]
+}

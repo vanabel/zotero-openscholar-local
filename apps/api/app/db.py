@@ -131,6 +131,14 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     if "zotero_collections" not in paper_cols:
         conn.execute("ALTER TABLE papers ADD COLUMN zotero_collections TEXT")
 
+    task_cols = {row[1] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    if "payload_json" not in task_cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN payload_json TEXT")
+    if "progress_json" not in task_cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN progress_json TEXT")
+    if "result_json" not in task_cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN result_json TEXT")
+
 
 def load_kv(key: str, default: str | None = None) -> str | None:
     with get_db() as conn:

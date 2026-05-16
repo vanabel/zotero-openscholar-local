@@ -96,7 +96,9 @@ npm install && npm run setup && npm run dev
 |------|------|
 | `DATA_DIR` | 数据目录（默认 `./data`，相对 API 启动 cwd） |
 | `ZOTERO_STORAGE_PATH` | PDF 扫描根目录 |
-| `OLLAMA_CHAT_MODEL` / `OLLAMA_EMBED_MODEL` | 对话与可选嵌入 |
+| `CHAT_PROVIDER` / `EMBED_PROVIDER` | `auto` \| `ollama` \| `openai`，可混用（见 `.env.example` 组合表） |
+| `OLLAMA_CHAT_MODEL` / `OLLAMA_EMBED_MODEL` | 本机对话与嵌入 |
+| `OPENAI_*` / `OPENAI_EMBED_MODEL` | OpenAI 兼容对话与嵌入 |
 | `OPENSCHOLAR_RETRIEVER_ENABLED` / `OPENSCHOLAR_RERANKER_ENABLED` | 启用官方检索/精排（PyTorch，见下节） |
 | `RETRIEVE_TOP_K_FTS` / `RETRIEVE_TOP_K_FINAL` | FTS 召回数 / 交给 LLM 的最终条数 |
 | `RETRIEVE_MAX_CHUNKS_PER_PAPER` / `RETRIEVE_MAX_PAPERS` | 单篇最多 chunk 数 / 最多文献篇数（`0` = 不限制） |
@@ -183,7 +185,8 @@ pnpm run reindex -- --paper-id <id>
 
 | 模式 | 配置 |
 |------|------|
-| CLI + mineru-api | `MINERU_MODE=cli`（默认）；`pnpm dev` 经 `scripts/dev-mineru-api.sh` 拉起 API |
+| CLI + mineru-api | `MINERU_MODE=cli`（默认）；`pnpm dev` 经 `scripts/dev-mineru-api.sh` 拉起本机 API |
+| 云端解析 | `MINERU_MODE=cloud` + `MINERU_API_TOKEN`；`pnpm dev` **不会**启动本机 mineru-api |
 | 在线 | `MINERU_MODE=cloud` + `MINERU_API_TOKEN` |
 | 降级 | 未安装或失败时 **pypdf** |
 

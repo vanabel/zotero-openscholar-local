@@ -74,11 +74,95 @@ def _upload_and_submit(client: httpx.Client, pdf_path: Path, paper_id: str) -> s
     return str(batch_id)
 
 
+def _parse_extract_progress(progress: object) -> tuple[int | None, int | None]:
+    if not isinstance(progress, dict):
+        return None, None
+    extracted: int | None = None
+    total: int | None = None
+    try:
+        if progress.get("extracted_pages") is not None:
+            extracted = int(progress["extracted_pages"])
+    except (TypeError, ValueError):
+        pass
+    try:
+        if progress.get("total_pages") is not None:
+            total = int(progress["total_pages"])
+    except (TypeError, ValueError):
+        pass
+    return extracted, total
+
+
+def _format_extract_progress_short(extracted: int | None, total: int | None) -> str:
+    if extracted is not None and total is not None and total > 0:
+        pct = min(100, int(extracted * 100 / total))
+        return f"{extracted}/{total} 页 ({pct}%)"
+    if extracted is not None:
+        return f"已处理 {extracted} 页"
+    if total is not None:
+        return f"共 {total} 页"
+    return "—"
+
+
+def _should_log_poll_progress(
+    *,
+    extracted: int | None,
+    total: int | None,
+    last_extracted: int | None,
+    last_log_at: float | None,
+    now: float,
+    min_pages_delta: int = 12,
+    min_interval_sec: float = 30.0,
+) -> bool:
+    """轮询进度节流：避免每 5s 打一行相同结构的 INFO。"""
+    if last_log_at is None:
+        return True
+    if extracted is None:
+        return extracted != last_extracted
+    if last_extracted is None:
+        return True
+    if extracted <= last_extracted:
+        return False
+    if extracted - last_extracted >= min_pages_delta:
+        return True
+    if total and total > 0:
+        if (extracted * 4) // total > (last_extracted * 4) // total:
+            return True
+        if extracted >= total:
+            return True
+    if last_log_at is not None and now - last_log_at >= min_interval_sec:
+        return True
+    return False
+
+
+_POLL_STALL_HEARTBEAT_SEC = 60.0
+
+
+def _should_log_poll_stall(
+    *,
+    extracted: int | None,
+    last_extracted: int | None,
+    last_log_at: float | None,
+    now: float,
+    heartbeat_sec: float = _POLL_STALL_HEARTBEAT_SEC,
+) -> bool:
+    """页码长时间不变时仍打心跳，避免 99% 时看起来像卡死。"""
+    if last_log_at is None:
+        return False
+    if extracted != last_extracted:
+        return False
+    return now - last_log_at >= heartbeat_sec
+
+
 def _poll_batch_done(client: httpx.Client, batch_id: str, file_name: str) -> str:
     """轮询批量任务，返回 full_zip_url。"""
     deadline = time.monotonic() + float(settings.parse_timeout_sec)
     interval = max(2.0, float(settings.mineru_cloud_poll_interval_sec))
     url = f"{_base_url()}/api/v4/extract-results/batch/{batch_id}"
+    last_extracted: int | None = None
+    last_log_at: float | None = None
+    poll_announced = False
+    near_done_announced = False
+    poll_started_at = time.monotonic()
 
     while time.monotonic() < deadline:
         data = _api_json(client.get(url, headers=_headers(), timeout=60.0))
@@ -107,12 +191,65 @@ def _poll_batch_done(client: httpx.Client, batch_id: str, file_name: str) -> str
             return str(zip_url)
         if state == "failed":
             raise MinerUCloudError(item.get("err_msg") or "MinerU 云端解析失败")
-        plog_info(
-            "parse",
-            "MinerU 云端任务进行中 state=%s progress=%s（total_pages 为当前上传文件页数；分段解析时每段单独计数）",
-            state,
-            item.get("extract_progress"),
-        )
+
+        progress = item.get("extract_progress")
+        extracted, total = _parse_extract_progress(progress)
+        now = time.monotonic()
+        if not poll_announced:
+            plog_info(
+                "parse",
+                "MinerU 云端解析轮询 batch_id=%s interval=%.0fs（total_pages 为当前上传切片；进度按页节流输出）",
+                batch_id,
+                interval,
+            )
+            poll_announced = True
+            last_extracted = extracted
+            last_log_at = now
+        elif _should_log_poll_progress(
+            extracted=extracted,
+            total=total,
+            last_extracted=last_extracted,
+            last_log_at=last_log_at,
+            now=now,
+        ):
+            plog_info(
+                "parse",
+                "MinerU 云端解析中 %s state=%s",
+                _format_extract_progress_short(extracted, total),
+                state,
+            )
+            last_extracted = extracted
+            last_log_at = now
+        elif (
+            not near_done_announced
+            and total
+            and extracted is not None
+            and extracted >= max(0, total - 1)
+        ):
+            plog_info(
+                "parse",
+                "MinerU 云端 %s：页码已近完成，MinerU 可能在处理末页或打包 zip（进度可能停在 99%% 数分钟）",
+                _format_extract_progress_short(extracted, total),
+            )
+            near_done_announced = True
+            last_log_at = now
+        elif _should_log_poll_stall(
+            extracted=extracted,
+            last_extracted=last_extracted,
+            last_log_at=last_log_at,
+            now=now,
+        ):
+            waited = int(now - poll_started_at)
+            plog_info(
+                "parse",
+                "MinerU 云端仍在轮询 %s state=%s（页码未变，已等待 %ss；属正常，超时上限 %ss）",
+                _format_extract_progress_short(extracted, total),
+                state,
+                waited,
+                settings.parse_timeout_sec,
+            )
+            last_log_at = now
+
         time.sleep(interval)
 
     raise MinerUCloudError(f"MinerU 云端解析超时（>{settings.parse_timeout_sec}s）")

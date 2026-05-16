@@ -1,0 +1,16 @@
+{
+  "id": "fixture-en-math-03",
+  "kind": "en-math-standard",
+  "source": "excerpt: Lu & Sleeman parabolic systems",
+  "min_chunks": 2,
+  "section_paths_contain": [
+    "Synopsis"
+  ],
+  "fts": [
+    {
+      "query": "semilinear parabolic comparison theorem",
+      "min_hits": 1,
+      "body_contains": "parabolic"
+    }
+  ]
+}

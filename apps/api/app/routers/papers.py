@@ -2,7 +2,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
@@ -36,20 +36,42 @@ def list_papers(
 
 
 @router.post("/index-batch")
-async def index_batch(body: BatchIndexBody):
-    from app.services.indexing import index_paper
+async def index_batch(
+    body: BatchIndexBody,
+    wait: bool = Query(False, description="为 true 时同步等待全部完成（脚本/调试）"),
+):
+    if wait:
+        from app.services.indexing import index_paper
 
-    results: list[dict] = []
-    for paper_id in body.paper_ids:
-        res = await index_paper(paper_id, force=body.force, reindex_only=body.reindex_only)
-        results.append({"paper_id": paper_id, **res})
-    ok_n = sum(1 for r in results if r.get("ok"))
-    return {
-        "ok": ok_n == len(results),
-        "success": ok_n,
-        "failed": len(results) - ok_n,
-        "results": results,
-    }
+        results: list[dict] = []
+        for paper_id in body.paper_ids:
+            res = await index_paper(paper_id, force=body.force, reindex_only=body.reindex_only)
+            results.append({"paper_id": paper_id, **res})
+        ok_n = sum(1 for r in results if r.get("ok"))
+        return {
+            "ok": ok_n == len(results),
+            "success": ok_n,
+            "failed": len(results) - ok_n,
+            "results": results,
+        }
+
+    from app.services.task_queue import enqueue_index_batch
+
+    tasks = enqueue_index_batch(
+        body.paper_ids,
+        force=body.force,
+        reindex_only=body.reindex_only,
+    )
+    errors = [t for t in tasks if t.get("error")]
+    return JSONResponse(
+        status_code=202,
+        content={
+            "ok": len(errors) == 0,
+            "queued": len(tasks) - len(errors),
+            "failed": len(errors),
+            "tasks": tasks,
+        },
+    )
 
 
 @router.get("/{paper_id}/pdf")
@@ -96,10 +118,28 @@ async def index_one(
     paper_id: str,
     force: bool = Query(False),
     reindex_only: bool = Query(False, description="仅重建分块/FTS/嵌入，复用 data/parsed 下 Markdown，不跑 MinerU"),
+    wait: bool = Query(False, description="为 true 时同步等待完成（脚本/调试）"),
 ):
-    from app.services.indexing import index_paper
+    if wait:
+        from app.services.indexing import index_paper
 
-    res = await index_paper(paper_id, force=force, reindex_only=reindex_only)
-    if not res.get("ok"):
-        raise HTTPException(status_code=400, detail=res.get("error", "索引失败"))
-    return res
+        res = await index_paper(paper_id, force=force, reindex_only=reindex_only)
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("error", "索引失败"))
+        return res
+
+    from app.services.task_queue import enqueue_index_task
+
+    info = enqueue_index_task(paper_id, force=force, reindex_only=reindex_only)
+    if info.get("error"):
+        raise HTTPException(status_code=400, detail=info["error"])
+    return JSONResponse(
+        status_code=202,
+        content={
+            "ok": True,
+            "task_id": info["task_id"],
+            "status": info["status"],
+            "deduped": info.get("deduped", False),
+            "paper_id": paper_id,
+        },
+    )

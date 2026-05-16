@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from app.config import settings
 from app.db import get_db, json_dumps_safe
 from app.pipeline_logging import plog_info
-from app.services.llm import chat_model_id
+from app.services.llm import chat_model_id, embed_model_id
 from app.services.translation import (
     translation_for_answer_enabled,
     translation_for_retrieval_enabled,
@@ -43,7 +43,9 @@ def corpus_fingerprint() -> str:
 def config_fingerprint() -> str:
     parts = [
         chat_model_id(),
-        settings.ollama_embed_model,
+        embed_model_id(),
+        f"cp={settings.chat_provider}",
+        f"ep={settings.embed_provider}",
         f"br={int(settings.bilingual_retrieval)}",
         f"ba={int(settings.bilingual_answer)}",
         f"rk={settings.retrieve_top_k_fts}:{settings.retrieve_top_k_final}",
@@ -51,8 +53,6 @@ def config_fingerprint() -> str:
         f"osk={int(settings.openscholar_reranker_enabled)}:{settings.openscholar_reranker_model}",
         settings.translation_ollama_model.strip() or "-",
     ]
-    if settings.openai_api_key and settings.openai_api_base:
-        parts.append(f"oa={settings.openai_chat_model}")
     return "|".join(parts)
 
 

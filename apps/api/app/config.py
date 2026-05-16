@@ -1,6 +1,9 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
+
+ProviderName = Literal["ollama", "openai"]
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # apps/api 目录（含 .env）；配置加载不依赖进程 cwd，避免从仓库根启动时读到错误的 .env
@@ -49,6 +52,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_chat_model: str = "qwen2.5:7b"
     ollama_embed_model: str = "nomic-embed-text"
+    # auto：有 OPENAI_API_KEY+BASE 时用 openai，否则 ollama；可显式 ollama/openai 混用
+    chat_provider: str = Field(default="auto", validation_alias="CHAT_PROVIDER")
+    embed_provider: str = Field(default="auto", validation_alias="EMBED_PROVIDER")
 
     # 双语检索/答案：将 ModelScope 等 GGUF 导入 Ollama 后填写模型名（如 hy-mt1.5）
     bilingual_retrieval: bool = Field(default=False, validation_alias="BILINGUAL_RETRIEVAL")
@@ -89,6 +95,7 @@ class Settings(BaseSettings):
     openai_api_base: str | None = None
     openai_api_key: str | None = None
     openai_chat_model: str = "gpt-4o-mini"
+    openai_embed_model: str = Field(default="text-embedding-3-small", validation_alias="OPENAI_EMBED_MODEL")
 
     # cli：本机 MinerU CLI；cloud：MinerU 在线 API（https://mineru.net）
     mineru_mode: str = Field(default="cli", validation_alias="MINERU_MODE")
@@ -119,6 +126,37 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     pipeline_log: int = Field(default=0, ge=0, le=2, validation_alias="PIPELINE_LOG")
     log_stages: str = Field(default="", validation_alias="LOG_STAGES")
+
+    @field_validator("chat_provider", "embed_provider", mode="before")
+    @classmethod
+    def _normalize_provider(cls, v):
+        if v is None:
+            return "auto"
+        if isinstance(v, str) and not v.strip():
+            return "auto"
+        return str(v).strip().lower()
+
+    @model_validator(mode="after")
+    def _validate_providers(self) -> Settings:
+        for field, val in (("chat_provider", self.chat_provider), ("embed_provider", self.embed_provider)):
+            if val not in ("auto", "ollama", "openai"):
+                raise ValueError(f"{field} must be one of: auto, ollama, openai (got {val!r})")
+        return self
+
+    def openai_ready(self) -> bool:
+        return bool((self.openai_api_key or "").strip() and (self.openai_api_base or "").strip())
+
+    def resolved_chat_provider(self) -> ProviderName:
+        p = self.chat_provider
+        if p == "auto":
+            return "openai" if self.openai_ready() else "ollama"
+        return p  # type: ignore[return-value]
+
+    def resolved_embed_provider(self) -> ProviderName:
+        p = self.embed_provider
+        if p == "auto":
+            return "openai" if self.openai_ready() else "ollama"
+        return p  # type: ignore[return-value]
 
     @model_validator(mode="after")
     def _resolve_data_dir_and_clamp_retrieve(self) -> Settings:

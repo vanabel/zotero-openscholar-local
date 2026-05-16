@@ -1,0 +1,17 @@
+{
+  "id": "fixture-table-01",
+  "kind": "tables-figures",
+  "source": "excerpt: Table 1 and Figure 1 captions",
+  "min_chunks": 2,
+  "text_must_include": [
+    "Table 1",
+    "Figure 1"
+  ],
+  "fts": [
+    {
+      "query": "Table 1 Levy-Khinchin",
+      "min_hits": 1,
+      "body_contains": "Table"
+    }
+  ]
+}

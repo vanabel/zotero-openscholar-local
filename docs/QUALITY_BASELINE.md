@@ -19,6 +19,12 @@
 
 集成测试应 **mock LLM**，不依赖 Ollama / MinerU 即可跑通：扫描元数据、分块、FTS 命中、配额逻辑。
 
+实现：`apps/api/tests/test_p0_regression.py`（参数化 8 个 fixture）；样本在 `apps/api/tests/fixtures/papers/`。从本机 `data/parsed` 重新摘录英文/扫描类 fixture：`.venv/bin/python scripts/build_p0_fixtures.py`。
+
+```bash
+cd apps/api && .venv/bin/pytest tests/test_p0_regression.py -q
+```
+
 ## 检索评测（P3）
 
 `apps/api/tests/eval/eval_queries.jsonl`：每行一条 JSON，例如：

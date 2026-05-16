@@ -57,29 +57,31 @@ def apply_paper_quota(
 
 
 def _finalize_retrieval(candidates: list[dict], top_k_final: int) -> list[dict]:
-    """截断 top_k 并应用跨篇配额（若已配置）。"""
-    trimmed = candidates[:top_k_final]
+    """应用跨篇配额并在全量排序列表上回填至 top_k_final（避免仅扫描前 K 条导致条数不足）。"""
+    if not candidates or top_k_final <= 0:
+        return []
     max_per = settings.retrieve_max_chunks_per_paper
     max_papers = settings.retrieve_max_papers
     if max_per <= 0 and max_papers <= 0:
-        return trimmed
+        return candidates[:top_k_final]
     max_distinct = max_papers if max_papers > 0 else None
     max_per_eff = max_per if max_per > 0 else top_k_final
-    before = len(trimmed)
+    naive = len(candidates[:top_k_final])
     out = apply_paper_quota(
-        trimmed,
+        candidates,
         max_per_paper=max_per_eff,
         max_distinct_papers=max_distinct,
         limit=top_k_final,
     )
-    if before != len(out):
+    if len(out) != naive or (len(out) < top_k_final and len(candidates) > len(out)):
         plog_info(
             "retrieve",
-            "跨篇配额 max_per_paper=%s max_papers=%s：%s → %s 条",
+            "跨篇配额 max_per_paper=%s max_papers=%s：候选池 %s 条 → 输出 %s 条（目标 %s）",
             max_per_eff,
             max_distinct,
-            before,
+            len(candidates),
             len(out),
+            top_k_final,
         )
     return out
 
@@ -362,7 +364,7 @@ def _rerank_with_cross_encoder(query: str, candidates: list[dict], top_k: int) -
     from app.services.openscholar_retrieval import mark_load_failed, openscholar_reranker_enabled, rerank_scores
 
     if not openscholar_reranker_enabled() or not candidates:
-        return candidates[:top_k]
+        return candidates
     pool = min(settings.openscholar_rerank_pool, len(candidates))
     pool_cands = candidates[:pool]
     try:
@@ -370,13 +372,22 @@ def _rerank_with_cross_encoder(query: str, candidates: list[dict], top_k: int) -
     except Exception as e:
         mark_load_failed(str(e), component="reranker")
         plog_info("retrieve", "OpenScholar Reranker 失败，回退 dense/FTS 顺序: %s", e)
-        return candidates[:top_k]
+        return candidates
     ranked = sorted(zip(scores, pool_cands), key=lambda x: x[0], reverse=True)
-    top = [c for _, c in ranked[:top_k]]
+    ordered = [c for _, c in ranked]
+    seen_ids = {str(c["chunk_id"]) for c in ordered}
+    tail = [c for c in candidates if str(c["chunk_id"]) not in seen_ids]
+    full = ordered + tail
     if scored := ranked[: min(5, len(ranked))]:
         plog_debug("retrieve", "OpenScholar rerank top 分数: %s", [round(s, 4) for s, _ in scored])
-    plog_info("retrieve", "OpenScholar Reranker 返回=%s (池=%s)", len(top), pool)
-    return top
+    plog_info(
+        "retrieve",
+        "OpenScholar Reranker 池=%s 已排序=%s（目标 top_k=%s，跨篇配额后截断）",
+        pool,
+        len(full),
+        top_k,
+    )
+    return full
 
 
 def _legacy_vector_rerank(candidates: list[dict], query_vec: list[float], top_k: int) -> list[dict]:
@@ -393,11 +404,11 @@ def _legacy_vector_rerank(candidates: list[dict], query_vec: list[float], top_k:
             continue
         scored.append((cosine_sim(query_vec, vec), c))
     scored.sort(key=lambda x: x[0], reverse=True)
-    top = [c for _, c in scored[:top_k]]
+    ordered = [c for _, c in scored]
     if scored:
         plog_debug("retrieve", "Ollama/bge 向量重排 top 相似度: %s", [round(x[0], 4) for x in scored[: min(5, len(scored))]])
-    plog_info("retrieve", "Ollama 嵌入重排后返回=%s", len(top))
-    return top
+    plog_info("retrieve", "Ollama 嵌入重排后排序=%s（目标 top_k=%s）", len(ordered), top_k)
+    return ordered
 
 
 def _openscholar_retrieve_sync(
@@ -520,13 +531,15 @@ def _openscholar_retrieve_sync(
                 plog_info("retrieve", "FTS 无命中，OpenScholar dense-only 候选=%s", len(candidates))
 
     if use_reranker:
-        return _finalize_retrieval(_rerank_with_cross_encoder(query, candidates, top_k_final), top_k_final)
+        return _rerank_with_cross_encoder(query, candidates, top_k_final)
     if use_retriever and query_vec:
-        order = _dense_rank_chunk_ids(query_vec, candidates, limit=top_k_final)
+        order = _dense_rank_chunk_ids(query_vec, candidates, limit=len(candidates))
         by_id = {str(c["chunk_id"]): c for c in candidates}
-        ranked = [by_id[cid] for cid in order if cid in by_id][:top_k_final]
-        return _finalize_retrieval(ranked, top_k_final)
-    return _finalize_retrieval(candidates[:top_k_final], top_k_final)
+        ranked = [by_id[cid] for cid in order if cid in by_id]
+        seen = {str(c["chunk_id"]) for c in ranked}
+        ranked.extend(c for c in candidates if str(c["chunk_id"]) not in seen)
+        return ranked
+    return candidates
 
 
 async def retrieve_for_query(
@@ -599,5 +612,5 @@ async def retrieve_for_query(
     if query_vec:
         return _finalize_retrieval(_legacy_vector_rerank(candidates, query_vec, top_k_final), top_k_final)
 
-    plog_info("retrieve", "无 query 向量，截断返回 top_k=%s", top_k_final)
-    return _finalize_retrieval(candidates[:top_k_final], top_k_final)
+    plog_info("retrieve", "无 query 向量，按 FTS 顺序返回（top_k=%s）", top_k_final)
+    return _finalize_retrieval(candidates, top_k_final)

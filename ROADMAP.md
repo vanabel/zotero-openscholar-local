@@ -59,6 +59,8 @@
 | 问答 / 综述流式、`[n]` 提示、缓存 | `[x]` |
 | 双语检索 / 答案（可选） | `[x]` |
 | Next.js：概览、文献库、问答、综述、设置 | `[x]` |
+| `CHAT_PROVIDER` / `EMBED_PROVIDER` 分离 + `OPENAI_EMBED_MODEL` | `[x]` 见 `.env.example` 组合表 |
+| 文献库索引：后台任务队列 + 轮询进度 | `[~]` 见 P6 |
 
 ---
 
@@ -69,9 +71,9 @@
 | 任务 | 状态 |
 |------|------|
 | 统一错误 JSON（LLM / MinerU / OpenScholar / 无 document.md） | `[ ]` |
-| 文献库：parse/index 失败原因、重试、仅重建索引 | `[~]` 状态字段有，失败原因与预览弱 |
+| 文献库：parse/index 失败原因、重试、仅重建索引 | `[~]` 索引已后台化+任务状态；失败原因展示、重试按钮仍弱 |
 | document.md / chunk 预览 | `[ ]` |
-| 最小回归集 fixture（3 英 + 3 中 + 扫描 + 公式 + 图表） | `[ ]` 见 [docs/QUALITY_BASELINE.md](./docs/QUALITY_BASELINE.md) |
+| 最小回归集 fixture（3 英 + 3 中 + 扫描 + 公式 + 图表） | `[x]` 见 [docs/QUALITY_BASELINE.md](./docs/QUALITY_BASELINE.md) |
 | CI：`pnpm test` 默认绿，Ollama/MinerU 标 optional | `[ ]` |
 
 **验收**：不启 Ollama 时 API 返回明确 JSON；`pnpm test` 默认通过。
@@ -165,14 +167,28 @@
 
 ## P6 — 异步与规模化
 
-文献量显著增大（建议 >200 篇）后再优先。
+文献量显著增大（建议 >200 篇）时优先完善；**索引入队与进度查询已起步**。
 
 | 任务 | 状态 |
 |------|------|
-| SQLite task queue + Worker | `[ ]` `tasks` 表已有 |
-| 进度 SSE / WebSocket | `[ ]` |
+| SQLite `tasks` 表 + 单 Worker（API 进程内） | `[x]` `enqueue_index_task`；`POST …/index` 返回 `202` + `task_id` |
+| 索引进度字段（parse / embed / scholar_embed / save） | `[x]` `progress_json`；`GET /tasks/active`、`GET /tasks/{id}` |
+| 文献库前端轮询进度 | `[x]` 索引徽章 `indexing` + 阶段文案 |
+| 服务重启恢复未完成任务 | `[x]` 启动时 `queued`/`running` 重新入队 |
+| 同步索引（脚本 / 调试） | `[x]` `?wait=true` 或 CLI `reindex_library.py` 直调 `index_paper` |
+| 进度 SSE / WebSocket | `[ ]` 当前为 HTTP 轮询 |
 | `parse-missing` / `index-missing` / `summarize-missing` | `[ ]` |
-| MinerU / 嵌入并发限制（M4 24G） | `[ ]` |
+| MinerU / 嵌入并发限制（M4 24G） | `[ ]` Worker 串行 1；OpenScholar 与 Ollama embed 仍顺序执行 |
+| 独立 Worker 进程 / API 与慢任务分离 | `[ ]` |
+
+**索引嵌入说明**（与 `EMBED_PROVIDER` 独立）：
+
+- 始终写入 `embedding_json`（Ollama 或 OpenAI 兼容 API）。
+- `OPENSCHOLAR_RETRIEVER_ENABLED=1` 且依赖可用时，额外写入 `scholar_embedding_json`（本机 Retriever）。
+- Reranker **不参与**建索引，仅检索阶段使用。
+
+**验收（当前）**：点索引后 API 立即返回；文献库可见阶段进度；批量索引不长时间阻塞 HTTP。  
+**验收（完整 P6）**：全库索引时 API 稳定；SSE/WS 进度；失败可重试；并发可配置不拖垮 M4。
 
 ---
 
@@ -194,7 +210,7 @@ P2  chunk 类型、去重、references 过滤
 P3  检索调参 + 评测集（配额已起步）→ LanceDB
 P4  citation verifier + no-evidence-no-claim
 P5  四类综述模板 + summaries + 导出
-P6  异步队列 + 进度
+P6  异步队列完善（SSE、missing-*、并发限制、独立 Worker）
 P7  外部源与实验性功能
 ```
 
@@ -207,14 +223,14 @@ SourceManager      # Zotero PDF + sqlite
 ParseManager       # MinerU + parse_reports
 CleanMarkdown      # 清洗
 ChunkManager       # 分块与类型
-EmbeddingManager   # 向量
+EmbeddingManager   # embedding_json + scholar_embedding_json
+TaskManager        # tasks 队列（index）；见 app/services/task_queue.py
 RetrievalManager   # FTS + dense + RRF + quota
 EvidenceManager    # 证据锁定
 CitationVerifier   # 引用校验
 SummaryManager     # 论文摘要
 ReviewWriter       # 综述生成
 ExportManager      # Markdown / DOCX
-TaskManager        # 后台任务
 ```
 
 ---
@@ -224,5 +240,6 @@ TaskManager        # 后台任务
 变更实现时请同步：
 
 - 本文件对应阶段的 `[x]` / `[ ]` / `[~]`  
-- `README.md` 功能表与配置项（新增 `RETRIEVE_MAX_*` 等）  
+- `README.md` 功能表与配置项（`CHAT_PROVIDER`、`EMBED_PROVIDER`、`RETRIEVE_MAX_*` 等）  
+- `apps/api/.env.example` 推荐组合表与索引嵌入说明  
 - `docs/QUALITY_BASELINE.md` 回归集与评测查询  

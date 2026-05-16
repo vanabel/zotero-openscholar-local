@@ -1,0 +1,15 @@
+{
+  "id": "fixture-zh-03",
+  "kind": "zh-review",
+  "source": "synthetic review outline",
+  "min_chunks": 3,
+  "section_paths_contain": ["研究背景", "主要进展", "展望", "参考文献"],
+  "text_must_include": ["Protter", "Lorentz"],
+  "fts": [
+    {
+      "query": "研究进展 抛物 展望",
+      "min_hits": 1,
+      "body_contains": "未来"
+    }
+  ]
+}

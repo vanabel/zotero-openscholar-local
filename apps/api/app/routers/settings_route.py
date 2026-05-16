@@ -23,7 +23,13 @@ class SettingsOut(BaseModel):
     ollama_base_url: str
     ollama_chat_model: str
     ollama_embed_model: str
+    chat_provider: str
+    embed_provider: str
+    chat_provider_resolved: str
+    embed_provider_resolved: str
     openai_configured: bool
+    openai_chat_model: str
+    openai_embed_model: str
     mineru_mode: str
     mineru_api_base_url: str
     mineru_cloud_configured: bool
@@ -52,7 +58,13 @@ def _settings_out() -> SettingsOut:
         ollama_base_url=settings.ollama_base_url,
         ollama_chat_model=settings.ollama_chat_model,
         ollama_embed_model=settings.ollama_embed_model,
-        openai_configured=bool(settings.openai_api_key and settings.openai_api_base),
+        chat_provider=settings.chat_provider,
+        embed_provider=settings.embed_provider,
+        chat_provider_resolved=settings.resolved_chat_provider(),
+        embed_provider_resolved=settings.resolved_embed_provider(),
+        openai_configured=settings.openai_ready(),
+        openai_chat_model=settings.openai_chat_model,
+        openai_embed_model=settings.openai_embed_model,
         mineru_mode=(settings.mineru_mode or "cli").strip(),
         mineru_api_base_url=(settings.mineru_api_base_url or "https://mineru.net").strip(),
         mineru_cloud_configured=bool((settings.mineru_api_token or "").strip()),

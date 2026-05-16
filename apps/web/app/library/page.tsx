@@ -93,15 +93,31 @@ function PaperMetaLines({ p }: { p: Paper }) {
   );
 }
 
-function StatusBadge({ label, value }: { label: string; value: string }) {
+type IndexTaskRow = {
+  id: string;
+  paper_id?: string | null;
+  status: string;
+  progress?: { phase?: string; done?: number; total?: number; message?: string } | null;
+  error?: string | null;
+};
+
+function StatusBadge({ label, value, hint }: { label: string; value: string; hint?: string }) {
   const ok = value === "parsed" || value === "indexed";
+  const indexing = value === "indexing";
+  const failed = value === "failed";
+  const cls = ok
+    ? "bg-emerald-50 text-emerald-800"
+    : failed
+      ? "bg-red-50 text-red-800"
+      : indexing
+        ? "bg-sky-50 text-sky-900"
+        : "bg-amber-50 text-amber-900";
   return (
-    <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs ${
-        ok ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"
-      }`}
-    >
-      {label}: {value}
+    <span className={`inline-flex flex-wrap items-center gap-1 rounded-md px-2 py-0.5 text-xs ${cls}`}>
+      <span>
+        {label}: {value}
+      </span>
+      {hint ? <span className="text-[11px] opacity-90">({hint})</span> : null}
     </span>
   );
 }
@@ -116,6 +132,8 @@ export default function LibraryPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [paperTasks, setPaperTasks] = useState<Map<string, IndexTaskRow>>(new Map());
+  const [taskPolling, setTaskPolling] = useState(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => setSearchQ(searchInput.trim()), 300);
@@ -149,6 +167,39 @@ export default function LibraryPage() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const syncActiveTasks = useCallback(async () => {
+    try {
+      const data = await apiGet<{ items: IndexTaskRow[] }>("/tasks/active");
+      const m = new Map<string, IndexTaskRow>();
+      let anyActive = false;
+      for (const t of data.items) {
+        const pid = t.paper_id;
+        if (pid) m.set(pid, t);
+        if (t.status === "queued" || t.status === "running") anyActive = true;
+      }
+      setPaperTasks(m);
+      if (!anyActive) {
+        setTaskPolling(false);
+        await refresh();
+      }
+      return anyActive;
+    } catch {
+      return false;
+    }
+  }, [refresh]);
+
+  useEffect(() => {
+    void syncActiveTasks().then((active) => {
+      if (active) setTaskPolling(true);
+    });
+  }, [syncActiveTasks]);
+
+  useEffect(() => {
+    if (!taskPolling) return;
+    const iv = window.setInterval(() => void syncActiveTasks(), 1500);
+    return () => window.clearInterval(iv);
+  }, [taskPolling, syncActiveTasks]);
 
   const allSelected = useMemo(
     () => items.length > 0 && items.every((p) => selected.has(p.id)),
@@ -193,28 +244,23 @@ export default function LibraryPage() {
   }
 
   async function indexPaper(id: string, force: boolean) {
-    setMsg(`正在索引 ${id.slice(0, 8)}…`);
+    setMsg(`提交索引 ${id.slice(0, 8)}…`);
     try {
       const res = await apiPost<{
-        chunks?: number;
-        embedding_ok?: number | null;
-        reused_parse?: boolean;
-        reused_index?: boolean;
-        elapsed_sec?: number;
+        task_id?: string;
+        status?: string;
+        deduped?: boolean;
+        error?: string;
       }>(`/papers/${id}/index?force=${force}`, {});
-      const hints: string[] = [];
-      if (res.reused_parse) hints.push("复用本地 Markdown");
-      if (res.reused_index) hints.push("复用已有索引");
-      const cacheHint = hints.length ? `（${hints.join("，")}）` : "";
+      setTaskPolling(true);
       setMsg(
-        `索引完成${cacheHint}：${res.chunks ?? 0} 个片段` +
-          (res.embedding_ok != null ? `，嵌入成功 ${String(res.embedding_ok)} 条` : "") +
-          (res.elapsed_sec != null ? `，${res.elapsed_sec}s` : "") +
-          "。",
+        res.deduped
+          ? `该文献已在索引队列中（task ${res.task_id?.slice(0, 8) ?? ""}）。`
+          : `已加入后台索引队列，可在下方状态栏查看进度。`,
       );
-      await refresh();
+      await syncActiveTasks();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "索引失败");
+      setMsg(e instanceof Error ? e.message : "提交索引失败");
     }
   }
 
@@ -251,26 +297,27 @@ export default function LibraryPage() {
       return;
     }
     setBatchBusy(true);
-    setMsg(`批量索引中（${ids.length} 篇）…`);
+    setMsg(`提交批量索引（${ids.length} 篇）…`);
     try {
       const res = await apiPost<{
-        success: number;
-        failed: number;
-        results: { paper_id: string; ok?: boolean; error?: string; chunks?: number }[];
+        queued?: number;
+        failed?: number;
+        tasks?: { task_id?: string; paper_id?: string; error?: string; deduped?: boolean }[];
       }>("/papers/index-batch", { paper_ids: ids, force });
-      const failed = res.results.filter((r) => !r.ok);
-      const failHint =
-        failed.length > 0
-          ? `；失败 ${failed.length} 篇：${failed
-              .slice(0, 3)
-              .map((f) => `${f.paper_id.slice(0, 8)}… ${f.error ?? ""}`)
+      const errs = (res.tasks ?? []).filter((t) => t.error);
+      const errHint =
+        errs.length > 0
+          ? `；无法入队 ${errs.length} 篇：${errs
+              .slice(0, 2)
+              .map((f) => f.error ?? "")
               .join("；")}`
           : "";
-      setMsg(`批量完成：成功 ${res.success} 篇，失败 ${res.failed} 篇${failHint}`);
+      setTaskPolling(true);
+      setMsg(`已提交 ${res.queued ?? ids.length} 篇到后台队列，请查看各文献索引状态${errHint}。`);
       setSelected(new Set());
-      await refresh();
+      await syncActiveTasks();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "批量索引失败");
+      setMsg(e instanceof Error ? e.message : "批量提交失败");
     } finally {
       setBatchBusy(false);
     }
@@ -376,6 +423,14 @@ export default function LibraryPage() {
             {items.map((p) => {
               const displayTitle = p.title || p.pdf_path.split("/").pop() || "未命名";
               const expanded = expandedId === p.id;
+              const task = paperTasks.get(p.id);
+              const indexHint =
+                task?.progress?.message ||
+                (task?.status === "queued" ? "排队中" : task?.status === "running" ? "处理中" : undefined);
+              const indexValue =
+                p.index_status === "indexing" || task?.status === "queued" || task?.status === "running"
+                  ? "indexing"
+                  : p.index_status;
               return (
                 <li key={p.id} className="px-4 py-3">
                   <div className="flex gap-3">
@@ -400,7 +455,7 @@ export default function LibraryPage() {
                       <PaperMetaLines p={p} />
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         <StatusBadge label="解析" value={p.parse_status} />
-                        <StatusBadge label="索引" value={p.index_status} />
+                        <StatusBadge label="索引" value={indexValue} hint={indexHint} />
                         <button
                           type="button"
                           onClick={() => setExpandedId(expanded ? null : p.id)}
