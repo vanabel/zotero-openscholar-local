@@ -113,8 +113,44 @@ def init_db() -> None:
               created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS parse_reports (
+              id TEXT PRIMARY KEY,
+              paper_id TEXT NOT NULL,
+              parser TEXT,
+              parser_mode TEXT,
+              parse_quality_score REAL,
+              text_length INTEGER,
+              page_count INTEGER,
+              detected_sections INTEGER,
+              formula_blocks INTEGER,
+              table_blocks INTEGER,
+              image_blocks INTEGER,
+              ocr_ratio REAL,
+              suspicious_garbled_ratio REAL,
+              references_detected INTEGER,
+              warnings TEXT,
+              created_at TEXT NOT NULL,
+              FOREIGN KEY (paper_id) REFERENCES papers(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS answer_citations (
+              id TEXT PRIMARY KEY,
+              answer_id TEXT NOT NULL,
+              source_type TEXT NOT NULL,
+              claim_text TEXT,
+              chunk_id TEXT,
+              ref_num INTEGER,
+              verified INTEGER NOT NULL DEFAULT 0,
+              verifier_score REAL,
+              status TEXT,
+              created_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_chunks_paper ON chunks(paper_id);
             CREATE INDEX IF NOT EXISTS idx_papers_deleted ON papers(deleted);
+            CREATE INDEX IF NOT EXISTS idx_parse_reports_paper ON parse_reports(paper_id);
+            CREATE INDEX IF NOT EXISTS idx_answer_citations_answer ON answer_citations(answer_id);
+            CREATE INDEX IF NOT EXISTS idx_summaries_paper ON summaries(paper_id);
             """
         )
         _migrate_schema(conn)
@@ -132,6 +168,16 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE papers ADD COLUMN zotero_collections TEXT")
     if "status_message" not in paper_cols:
         conn.execute("ALTER TABLE papers ADD COLUMN status_message TEXT")
+    if "parse_quality_score" not in paper_cols:
+        conn.execute("ALTER TABLE papers ADD COLUMN parse_quality_score REAL")
+
+    chunk_cols = {row[1] for row in conn.execute("PRAGMA table_info(chunks)").fetchall()}
+    if "chunk_type" not in chunk_cols:
+        conn.execute("ALTER TABLE chunks ADD COLUMN chunk_type TEXT DEFAULT 'unknown'")
+    if "chunk_quality_score" not in chunk_cols:
+        conn.execute("ALTER TABLE chunks ADD COLUMN chunk_quality_score REAL")
+    if "content_hash" not in chunk_cols:
+        conn.execute("ALTER TABLE chunks ADD COLUMN content_hash TEXT")
 
     task_cols = {row[1] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
     if "payload_json" not in task_cols:

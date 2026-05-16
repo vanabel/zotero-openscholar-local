@@ -9,7 +9,14 @@ from pathlib import Path
 from app.config import settings
 from app.db import get_db
 from app.pipeline_logging import plog_info
-from app.services.chunker import chunk_markdown, estimate_tokens, stable_chunk_id
+from app.services.chunk_quality import (
+    classify_chunk_type,
+    content_hash,
+    dedupe_chunk_drafts,
+    score_chunk,
+)
+from app.services.chunker import ChunkDraft, chunk_markdown, estimate_tokens, stable_chunk_id
+from app.services.parse_quality import analyze_markdown, latest_parse_report, save_parse_report
 from app.services.llm import EmbeddingClient
 from app.services.pdf_parse import (
     clear_parsed_output_dir,
@@ -34,6 +41,98 @@ def _chunk_count(paper_id: str) -> int:
     with get_db() as conn:
         row = conn.execute("SELECT COUNT(*) AS c FROM chunks WHERE paper_id = ?", (paper_id,)).fetchone()
         return int(row["c"]) if row else 0
+
+
+def _upsert_chunk_fts(conn, *, chunk_id: str, paper_id: str, body: str) -> None:
+    """FTS5 无 REPLACE；按 chunk_id 先删后插，避免重复行。"""
+    conn.execute("DELETE FROM chunks_fts WHERE chunk_id = ?", (chunk_id,))
+    conn.execute(
+        "INSERT INTO chunks_fts(chunk_id, paper_id, body) VALUES(?,?,?)",
+        (chunk_id, paper_id, body),
+    )
+
+
+def _prune_stale_chunks(conn, paper_id: str, keep_ids: list[str]) -> None:
+    if keep_ids:
+        placeholders = ",".join("?" * len(keep_ids))
+        params = (paper_id, *keep_ids)
+        conn.execute(
+            f"DELETE FROM chunks WHERE paper_id = ? AND id NOT IN ({placeholders})",
+            params,
+        )
+        conn.execute(
+            f"DELETE FROM chunks_fts WHERE paper_id = ? AND chunk_id NOT IN ({placeholders})",
+            params,
+        )
+    else:
+        conn.execute("DELETE FROM chunks WHERE paper_id = ?", (paper_id,))
+        conn.execute("DELETE FROM chunks_fts WHERE paper_id = ?", (paper_id,))
+
+
+def save_paper_chunks(
+    conn,
+    paper_id: str,
+    drafts: list[ChunkDraft],
+    embeddings: list[list[float] | None],
+    scholar_embeddings: list[list[float] | None],
+    *,
+    md_hash: str,
+    prune_stale: bool = True,
+) -> list[str]:
+    """
+    先 upsert 新分块与 FTS，再（可选）删除该文献下不在新集合中的旧行。
+    中断时最多留下上一版 + 部分新版，不会出现「已删光、尚未写入」的空窗。
+    """
+    now = _utc_now()
+    new_ids: list[str] = []
+    for d, emb, s_emb in zip(drafts, embeddings, scholar_embeddings, strict=True):
+        cid = stable_chunk_id(paper_id, d.section_path, d.chunk_index)
+        new_ids.append(cid)
+        ctype = classify_chunk_type(d.section_path, d.text)
+        cscore = score_chunk(d.text, ctype)
+        chash = content_hash(d.text)
+        emb_json = json.dumps(emb, ensure_ascii=False) if emb is not None else None
+        scholar_json = json.dumps(s_emb, ensure_ascii=False) if s_emb is not None else None
+        tok = estimate_tokens(d.text)
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO chunks(
+              id, paper_id, section_title, section_path, page_start, page_end,
+              chunk_index, text, token_count, embedding_json, scholar_embedding_json,
+              chunk_type, chunk_quality_score, content_hash, created_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                cid,
+                paper_id,
+                d.section_title,
+                d.section_path,
+                d.page_start,
+                d.page_end,
+                d.chunk_index,
+                d.text,
+                tok,
+                emb_json,
+                scholar_json,
+                ctype,
+                cscore,
+                chash,
+                now,
+            ),
+        )
+        _upsert_chunk_fts(conn, chunk_id=cid, paper_id=paper_id, body=d.text)
+
+    if prune_stale:
+        _prune_stale_chunks(conn, paper_id, new_ids)
+
+    conn.execute(
+        """
+        UPDATE papers SET index_status='indexed', parse_status='parsed',
+          md_sha256=?, status_message=NULL, updated_at=? WHERE id=?
+        """,
+        (md_hash, now, paper_id),
+    )
+    return new_ids
 
 
 async def index_paper(
@@ -108,6 +207,17 @@ async def index_paper(
             progress.update("parse", 1, 1, "解析完成")
         meta["pdf_sha256"] = pdf_sha
         (out_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        report = analyze_markdown(md, parser=str(meta.get("mode") or "mineru"), parser_mode=meta.get("parser_mode"))
+        prev = None if force else latest_parse_report(paper_id)
+        if prev and (prev.get("parse_quality_score") or 0) > (report.get("parse_quality_score") or 0):
+            plog_info(
+                "index",
+                "新解析质量分 %.3f 低于已有 %.3f，仍写入报告（force=%s）",
+                report.get("parse_quality_score"),
+                prev.get("parse_quality_score"),
+                force,
+            )
+        save_parse_report(paper_id, report)
         md_hash = sha256_text(md)
         title_guess = pdf_path.stem
         first_line = md.splitlines()[0] if md else ""
@@ -185,15 +295,26 @@ async def index_paper(
 
     if progress:
         progress.update("chunk", 0, 1, "分块中…")
-    drafts = chunk_markdown(md)
+    drafts = dedupe_chunk_drafts(chunk_markdown(md))
     if progress:
-        progress.update("chunk", 1, 1, f"共 {len(drafts)} 个片段")
+        progress.update("chunk", 1, 1, f"共 {len(drafts)} 个片段（已去重）")
     embed_client = EmbeddingClient()
     texts = [d.text for d in drafts]
 
     embeddings: list[list[float] | None] = [None] * len(texts)
     batch = 8
     n_texts = len(texts)
+    if n_texts:
+        n_batches = (n_texts + batch - 1) // batch
+        plog_info(
+            "index",
+            "BGE 嵌入开始 paper_id=%s chunks=%s 批次数=%s 批大小=%s",
+            paper_id,
+            n_texts,
+            n_batches,
+            batch,
+        )
+    t_embed = time.monotonic()
     for i in range(0, n_texts, batch):
         slice_t = texts[i : i + batch]
         done = min(i + len(slice_t), n_texts)
@@ -207,6 +328,17 @@ async def index_paper(
             plog_info("index", "嵌入批次失败 [%s:%s]: %s", i, i + len(slice_t), e)
             for j in range(len(slice_t)):
                 embeddings[i + j] = None
+
+    if n_texts:
+        embed_ok = sum(1 for e in embeddings if e is not None)
+        plog_info(
+            "index",
+            "BGE 嵌入完成 paper_id=%s ok=%s/%s 耗时=%.2fs",
+            paper_id,
+            embed_ok,
+            n_texts,
+            time.monotonic() - t_embed,
+        )
 
     scholar_embeddings: list[list[float] | None] = [None] * len(texts)
     from app.services.openscholar_retrieval import encode_passages, openscholar_retriever_enabled
@@ -240,47 +372,13 @@ async def index_paper(
     if progress:
         progress.update("save", 0, 1, "写入数据库…")
     with get_db() as conn:
-        conn.execute("DELETE FROM chunks WHERE paper_id = ?", (paper_id,))
-        conn.execute("DELETE FROM chunks_fts WHERE paper_id = ?", (paper_id,))
-
-        for d, emb, s_emb in zip(drafts, embeddings, scholar_embeddings, strict=True):
-            cid = stable_chunk_id(paper_id, d.section_path, d.chunk_index)
-            emb_json = json.dumps(emb, ensure_ascii=False) if emb is not None else None
-            scholar_json = json.dumps(s_emb, ensure_ascii=False) if s_emb is not None else None
-            tok = estimate_tokens(d.text)
-            conn.execute(
-                """
-                INSERT INTO chunks(
-                  id, paper_id, section_title, section_path, page_start, page_end,
-                  chunk_index, text, token_count, embedding_json, scholar_embedding_json, created_at
-                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-                """,
-                (
-                    cid,
-                    paper_id,
-                    d.section_title,
-                    d.section_path,
-                    d.page_start,
-                    d.page_end,
-                    d.chunk_index,
-                    d.text,
-                    tok,
-                    emb_json,
-                    scholar_json,
-                    _utc_now(),
-                ),
-            )
-            conn.execute(
-                "INSERT INTO chunks_fts(chunk_id, paper_id, body) VALUES(?,?,?)",
-                (cid, paper_id, d.text),
-            )
-
-        conn.execute(
-            """
-            UPDATE papers SET index_status='indexed', parse_status='parsed',
-              md_sha256=?, status_message=NULL, updated_at=? WHERE id=?
-            """,
-            (md_hash, _utc_now(), paper_id),
+        save_paper_chunks(
+            conn,
+            paper_id,
+            drafts,
+            embeddings,
+            scholar_embeddings,
+            md_hash=md_hash,
         )
     if progress:
         progress.update("save", 1, 1, "完成")

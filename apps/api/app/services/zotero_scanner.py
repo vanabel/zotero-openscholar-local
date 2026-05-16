@@ -138,7 +138,14 @@ def scan_storage() -> dict:
     return out
 
 
-def _papers_where_clause(q: str | None, include_deleted: bool) -> tuple[str, list]:
+def _papers_where_clause(
+    q: str | None,
+    include_deleted: bool,
+    *,
+    parse_quality_lte: float | None = None,
+    parse_quality_gte: float | None = None,
+    parse_quality_missing: bool = False,
+) -> tuple[str, list]:
     clauses: list[str] = []
     params: list = []
     if not include_deleted:
@@ -152,43 +159,23 @@ def _papers_where_clause(q: str | None, include_deleted: bool) -> tuple[str, lis
             "OR COALESCE(zotero_tags, '') LIKE ? OR COALESCE(zotero_collections, '') LIKE ?)"
         )
         params.extend([like, like, like, like, like, like])
+    if parse_quality_missing:
+        clauses.append("parse_quality_score IS NULL")
+    else:
+        if parse_quality_lte is not None:
+            clauses.append("parse_quality_score IS NOT NULL AND parse_quality_score <= ?")
+            params.append(parse_quality_lte)
+        if parse_quality_gte is not None:
+            clauses.append("parse_quality_score IS NOT NULL AND parse_quality_score >= ?")
+            params.append(parse_quality_gte)
     where = " AND ".join(clauses) if clauses else "1=1"
     return where, params
 
 
 def _reconcile_paper_status_with_disk(conn, items: list[dict]) -> None:
-    """
-    根据 data/parsed/{id}/document.md 与 chunks 表校准 parse_status / index_status，
-    修复「已解析/已索引但 DB 仍为 pending」导致重启后文献库状态不对的问题。
-    """
-    if not items:
-        return
-    rows = conn.execute("SELECT paper_id, COUNT(*) AS c FROM chunks GROUP BY paper_id").fetchall()
-    chunk_map = {str(r["paper_id"]): int(r["c"]) for r in rows}
-    parsed_root = settings.parsed_dir
-    now = _utc_now()
-    for item in items:
-        pid = item["id"]
-        doc = parsed_root / pid / "document.md"
-        try:
-            has_md = doc.is_file() and doc.stat().st_size >= 100
-        except OSError:
-            has_md = False
-        nch = chunk_map.get(pid, 0)
-        ps = item.get("parse_status") or "pending"
-        ix = item.get("index_status") or "pending"
-        new_ps, new_ix = ps, ix
-        if has_md and ps != "parsed":
-            new_ps = "parsed"
-        if nch > 0 and ix != "indexed":
-            new_ix = "indexed"
-        if new_ps != ps or new_ix != ix:
-            conn.execute(
-                "UPDATE papers SET parse_status = ?, index_status = ?, updated_at = ? WHERE id = ?",
-                (new_ps, new_ix, now, pid),
-            )
-            item["parse_status"] = new_ps
-            item["index_status"] = new_ix
+    from app.services.index_reconcile import reconcile_papers_with_disk
+
+    reconcile_papers_with_disk(conn, items)
 
 
 def list_papers(
@@ -196,21 +183,73 @@ def list_papers(
     offset: int = 0,
     include_deleted: bool = False,
     q: str | None = None,
+    *,
+    parse_quality_lte: float | None = None,
+    parse_quality_gte: float | None = None,
+    parse_quality_missing: bool = False,
+    sort: str = "updated",
 ) -> list[dict]:
-    where, params = _papers_where_clause(q, include_deleted)
+    where, params = _papers_where_clause(
+        q,
+        include_deleted,
+        parse_quality_lte=parse_quality_lte,
+        parse_quality_gte=parse_quality_gte,
+        parse_quality_missing=parse_quality_missing,
+    )
+    order = "updated_at DESC"
+    if sort == "quality_asc":
+        order = "parse_quality_score IS NULL, parse_quality_score ASC, updated_at DESC"
+    elif sort == "quality_desc":
+        order = "parse_quality_score IS NULL, parse_quality_score DESC, updated_at DESC"
     with get_db() as conn:
-        sql = f"SELECT * FROM papers WHERE {where} ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+        sql = f"SELECT * FROM papers WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?"
         rows = conn.execute(sql, (*params, limit, offset)).fetchall()
         items = [dict(r) for r in rows]
         _reconcile_paper_status_with_disk(conn, items)
         return items
 
 
-def count_papers(include_deleted: bool = False, q: str | None = None) -> int:
-    where, params = _papers_where_clause(q, include_deleted)
+def count_papers(
+    include_deleted: bool = False,
+    q: str | None = None,
+    *,
+    parse_quality_lte: float | None = None,
+    parse_quality_gte: float | None = None,
+    parse_quality_missing: bool = False,
+) -> int:
+    where, params = _papers_where_clause(
+        q,
+        include_deleted,
+        parse_quality_lte=parse_quality_lte,
+        parse_quality_gte=parse_quality_gte,
+        parse_quality_missing=parse_quality_missing,
+    )
     with get_db() as conn:
         row = conn.execute(f"SELECT COUNT(*) AS c FROM papers WHERE {where}", params).fetchone()
         return int(row["c"]) if row else 0
+
+
+def parse_quality_summary(include_deleted: bool = False) -> dict:
+    """全库解析质量分布（用于文献库筛选摘要）。"""
+    del_clause = "" if include_deleted else "WHERE deleted = 0"
+    with get_db() as conn:
+        row = conn.execute(
+            f"""
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN parse_quality_score IS NULL THEN 1 ELSE 0 END) AS unscored,
+              SUM(CASE WHEN parse_quality_score IS NOT NULL AND parse_quality_score < 0.65 THEN 1 ELSE 0 END) AS low,
+              SUM(CASE WHEN parse_quality_score IS NOT NULL AND parse_quality_score >= 0.85 THEN 1 ELSE 0 END) AS high
+            FROM papers {del_clause}
+            """
+        ).fetchone()
+    return {
+        "total": int(row["total"] or 0),
+        "unscored": int(row["unscored"] or 0),
+        "low_quality": int(row["low"] or 0),
+        "high_quality": int(row["high"] or 0),
+        "low_quality_threshold": 0.65,
+    }
 
 
 def get_paper(paper_id: str) -> dict | None:

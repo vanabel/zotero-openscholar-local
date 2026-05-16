@@ -172,7 +172,7 @@ class EmbeddingClient:
             url = f"{base}/embeddings"
             headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
             model = settings.openai_embed_model
-            plog_info("embed", "embed 开始 provider=openai model=%s 条数=%s", model, len(texts))
+            plog_debug("embed", "embed 开始 provider=openai model=%s 条数=%s", model, len(texts))
             t0 = time.monotonic()
             async with httpx.AsyncClient(timeout=120.0) as client:
                 vecs: list[list[float]] = []
@@ -182,11 +182,11 @@ class EmbeddingClient:
                     r.raise_for_status()
                     data = r.json()
                     vecs.append(data["data"][0]["embedding"])
-                plog_info("embed", "embed 完成 耗时=%.2fs dim=%s", time.monotonic() - t0, len(vecs[0]) if vecs else 0)
+                plog_debug("embed", "embed 完成 耗时=%.2fs dim=%s", time.monotonic() - t0, len(vecs[0]) if vecs else 0)
                 return vecs
 
         url = f"{settings.ollama_base_url.rstrip('/')}/api/embeddings"
-        plog_info("embed", "embed 开始 provider=ollama model=%s 条数=%s", settings.ollama_embed_model, len(texts))
+        plog_debug("embed", "embed 开始 provider=ollama model=%s 条数=%s", settings.ollama_embed_model, len(texts))
         t0 = time.monotonic()
         async with httpx.AsyncClient(timeout=120.0) as client:
             vecs: list[list[float]] = []
@@ -201,7 +201,7 @@ class EmbeddingClient:
                 if not emb:
                     raise RuntimeError("Ollama 未返回 embedding，请确认已拉取嵌入模型。")
                 vecs.append(emb)
-            plog_info("embed", "embed 完成 耗时=%.2fs dim=%s", time.monotonic() - t0, len(vecs[0]) if vecs else 0)
+            plog_debug("embed", "embed 完成 耗时=%.2fs dim=%s", time.monotonic() - t0, len(vecs[0]) if vecs else 0)
             return vecs
 
 

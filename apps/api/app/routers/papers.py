@@ -23,16 +23,48 @@ def sync_zotero_metadata(
     return sync_zotero_metadata_to_papers(include_deleted=include_deleted)
 
 
+@router.get("/quality-summary")
+def papers_quality_summary():
+    """解析质量分布（低质量阈值默认 0.65）。"""
+    from app.services.zotero_scanner import parse_quality_summary
+
+    return parse_quality_summary()
+
+
 @router.get("")
 def list_papers(
     limit: int = Query(200, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     q: str | None = Query(None, max_length=500, description="按标题、文件名、路径、作者、标签、集合模糊搜索"),
+    parse_quality_lte: float | None = Query(
+        None, ge=0.0, le=1.0, description="仅返回质量分 ≤ 该值的文献（需已有评分）"
+    ),
+    parse_quality_gte: float | None = Query(
+        None, ge=0.0, le=1.0, description="仅返回质量分 ≥ 该值的文献"
+    ),
+    parse_quality_missing: bool = Query(
+        False, description="仅返回尚无 parse_quality_score 的文献"
+    ),
+    sort: str = Query(
+        "updated",
+        pattern="^(updated|quality_asc|quality_desc)$",
+        description="排序：updated | quality_asc | quality_desc",
+    ),
 ):
     from app.services.zotero_scanner import count_papers, list_papers as lp
 
-    items = lp(limit=limit, offset=offset, q=q)
-    return {"items": items, "total": count_papers(q=q), "q": (q or "").strip() or None}
+    kw = {
+        "parse_quality_lte": parse_quality_lte,
+        "parse_quality_gte": parse_quality_gte,
+        "parse_quality_missing": parse_quality_missing,
+    }
+    items = lp(limit=limit, offset=offset, q=q, sort=sort, **kw)
+    return {
+        "items": items,
+        "total": count_papers(q=q, **kw),
+        "q": (q or "").strip() or None,
+        "filters": {**kw, "sort": sort},
+    }
 
 
 @router.post("/index-batch")
@@ -140,6 +172,19 @@ def get_paper_document(
     }
 
 
+@router.get("/{paper_id}/parse-report")
+def get_parse_report(paper_id: str):
+    from app.services.parse_quality import latest_parse_report
+    from app.services.zotero_scanner import get_paper
+
+    if not get_paper(paper_id):
+        raise HTTPException(status_code=404, detail="未找到文献")
+    report = latest_parse_report(paper_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="尚无解析质量报告，请先建立索引")
+    return report
+
+
 @router.get("/{paper_id}/chunks")
 def list_paper_chunks(
     paper_id: str,
@@ -160,7 +205,8 @@ def list_paper_chunks(
         rows = conn.execute(
             """
             SELECT id, paper_id, section_title, section_path, page_start, page_end,
-                   chunk_index, token_count, substr(text, 1, 400) AS text_preview
+                   chunk_index, chunk_type, chunk_quality_score, content_hash,
+                   token_count, substr(text, 1, 400) AS text_preview
             FROM chunks
             WHERE paper_id = ?
             ORDER BY chunk_index ASC

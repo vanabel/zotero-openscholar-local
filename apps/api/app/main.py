@@ -50,6 +50,9 @@ def _log_openscholar_startup() -> None:
 async def lifespan(app: FastAPI):
     setup_logging()
     init_db()
+    from app.services.index_reconcile import reconcile_database_on_startup
+
+    reconcile_database_on_startup()
     _log_openscholar_startup()
     start_worker()
     yield

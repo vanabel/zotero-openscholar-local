@@ -54,6 +54,14 @@ async def _run(ids: list[str]) -> int:
     return 1 if fail else 0
 
 
+def _argv_for_parse() -> list[str]:
+    """pnpm/npm 经 `run script -- --flags` 时可能把字面量 `--` 传给脚本，此处剥掉。"""
+    argv = sys.argv[1:]
+    while argv and argv[0] == "--":
+        argv = argv[1:]
+    return argv
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="仅重建索引（不跑 MinerU）")
     parser.add_argument("--paper-id", action="append", dest="paper_ids", help="指定 paper_id，可重复")
@@ -63,7 +71,7 @@ def main() -> None:
         action="store_true",
         help="与 --all 合用：仅 index_status != indexed 且有 Markdown 的文献",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(_argv_for_parse())
     setup_logging()
     init_db()
 
