@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import sqlite3
@@ -17,6 +18,30 @@ def retrieve_limits() -> tuple[int, int]:
     fts = settings.retrieve_top_k_fts
     final = min(settings.retrieve_top_k_final, fts)
     return fts, final
+
+
+def dedupe_chunks_by_text(ranked: list[dict], *, min_chars: int = 48) -> list[dict]:
+    """检索结果级去重：相同正文（或前缀指纹）只保留排名最高的一条。"""
+    if not ranked:
+        return []
+    seen: set[str] = set()
+    out: list[dict] = []
+    for c in ranked:
+        text = (c.get("text") or "").strip()
+        if not text:
+            out.append(c)
+            continue
+        if len(text) < min_chars:
+            key = text
+        else:
+            key = hashlib.sha256(text.encode("utf-8")).hexdigest()[:20]
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(c)
+    if len(out) < len(ranked):
+        plog_info("retrieve", "chunk 正文去重：%s → %s", len(ranked), len(out))
+    return out
 
 
 def apply_paper_quota(
@@ -60,6 +85,7 @@ def _finalize_retrieval(candidates: list[dict], top_k_final: int) -> list[dict]:
     """应用跨篇配额并在全量排序列表上回填至 top_k_final（避免仅扫描前 K 条导致条数不足）。"""
     if not candidates or top_k_final <= 0:
         return []
+    candidates = dedupe_chunks_by_text(candidates)
     max_per = settings.retrieve_max_chunks_per_paper
     max_papers = settings.retrieve_max_papers
     if max_per <= 0 and max_papers <= 0:

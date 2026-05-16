@@ -238,6 +238,8 @@ async def _run_index_task(task_id: str) -> None:
 
 
 def _fail_task(task_id: str, paper_id: str, error: str, result: dict | None) -> None:
+    from app.services.paper_status import set_paper_status
+
     now = _utc_now()
     with get_db() as conn:
         conn.execute(
@@ -247,10 +249,7 @@ def _fail_task(task_id: str, paper_id: str, error: str, result: dict | None) -> 
             """,
             (error, json_dumps_safe(result) if result else None, now, task_id),
         )
-        conn.execute(
-            "UPDATE papers SET index_status = 'failed', updated_at = ? WHERE id = ?",
-            (now, paper_id),
-        )
+    set_paper_status(paper_id, index_status="failed", status_message=error[:2000])
 
 
 async def _worker_loop() -> None:

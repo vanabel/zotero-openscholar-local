@@ -166,7 +166,10 @@ async def index_paper(
         plog_info("index", "复用已有分块与嵌入，跳过重建 paper_id=%s chunks=%s", paper_id, _chunk_count(paper_id))
         with get_db() as conn:
             conn.execute(
-                "UPDATE papers SET index_status='indexed', updated_at=? WHERE id=?",
+                """
+                UPDATE papers SET index_status='indexed', status_message=NULL, updated_at=?
+                WHERE id=?
+                """,
                 (_utc_now(), paper_id),
             )
         return {
@@ -274,7 +277,8 @@ async def index_paper(
 
         conn.execute(
             """
-            UPDATE papers SET index_status='indexed', md_sha256=?, updated_at=? WHERE id=?
+            UPDATE papers SET index_status='indexed', parse_status='parsed',
+              md_sha256=?, status_message=NULL, updated_at=? WHERE id=?
             """,
             (md_hash, _utc_now(), paper_id),
         )

@@ -34,7 +34,7 @@ def test_mixed_chat_ollama_embed_openai(monkeypatch, clear_openai):
     assert settings.resolved_chat_provider() == "ollama"
     assert settings.resolved_embed_provider() == "openai"
     assert chat_model_id().startswith("ollama:")
-    assert embed_model_id() == "openai:text-embedding-3-small"
+    assert embed_model_id() == f"openai:{settings.openai_embed_model}"
 
 
 def test_mixed_chat_openai_embed_ollama(monkeypatch, clear_openai):

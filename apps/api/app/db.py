@@ -130,6 +130,8 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE papers ADD COLUMN zotero_tags TEXT")
     if "zotero_collections" not in paper_cols:
         conn.execute("ALTER TABLE papers ADD COLUMN zotero_collections TEXT")
+    if "status_message" not in paper_cols:
+        conn.execute("ALTER TABLE papers ADD COLUMN status_message TEXT")
 
     task_cols = {row[1] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
     if "payload_json" not in task_cols:

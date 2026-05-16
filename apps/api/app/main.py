@@ -1,9 +1,17 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.errors import (
+    AppError,
+    app_error_handler,
+    http_exception_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
 from app.db import init_db
 from app.pipeline_logging import plog_info, setup_logging
 from app.routers import chat, chunks, health, papers, review, scan, settings_route, stats, tasks
@@ -75,3 +83,8 @@ app.include_router(review.router)
 app.include_router(settings_route.router)
 app.include_router(stats.router)
 app.include_router(tasks.router)
+
+app.add_exception_handler(AppError, app_error_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)

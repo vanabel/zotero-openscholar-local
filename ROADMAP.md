@@ -70,9 +70,9 @@
 
 | 任务 | 状态 |
 |------|------|
-| 统一错误 JSON（LLM / MinerU / OpenScholar / 无 document.md） | `[ ]` |
-| 文献库：parse/index 失败原因、重试、仅重建索引 | `[~]` 索引已后台化+任务状态；失败原因展示、重试按钮仍弱 |
-| document.md / chunk 预览 | `[ ]` |
+| 统一错误 JSON（LLM / MinerU / OpenScholar / 无 document.md） | `[x]` `app/errors.py` + 全局 handler |
+| 文献库：parse/index 失败原因、重试、仅重建索引 | `[~]` `status_message`、重试/仅重建索引按钮；parse 失败仍弱 |
+| document.md / chunk 预览 | `[x]` `GET /papers/{id}/document`、`/chunks` + 文献库展开预览 |
 | 最小回归集 fixture（3 英 + 3 中 + 扫描 + 公式 + 图表） | `[x]` 见 [docs/QUALITY_BASELINE.md](./docs/QUALITY_BASELINE.md) |
 | CI：`pnpm test` 默认绿，Ollama/MinerU 标 optional | `[ ]` |
 
@@ -121,7 +121,7 @@
 |------|------|
 | 跨篇配额 `RETRIEVE_MAX_CHUNKS_PER_PAPER` | `[x]` |
 | 最多文献数 `RETRIEVE_MAX_PAPERS` | `[x]` |
-| Chunk 内容去重（检索结果级） | `[ ]` |
+| Chunk 内容去重（检索结果级） | `[x]` `dedupe_chunks_by_text` in `retriever.py` |
 | 查询扩展 / 专名同义词 | `[~]` 双语 Hy-MT 扩展已有 |
 | `eval_queries.jsonl` + 评测脚本 | `[ ]` |
 | LanceDB 替代 SQLite 全表 dense 扫描 | `[ ]` |
@@ -138,9 +138,9 @@
 | 任务 | 状态 |
 |------|------|
 | Evidence locking（`[CHUNK:id]`） | `[~]` prompt 含 chunk_id，未强制对齐 |
-| `CitationVerifier`（存在性、关键词、无引用断言） | `[ ]` |
+| `CitationVerifier`（存在性、关键词、无引用断言） | `[~]` `citation_verifier.py`：`[n]` 越界校验；claim 拆分未做 |
 | `answer_citations` 表 + claim 拆分 | `[ ]` |
-| 无证据固定降级话术 | `[~]` prompt 要求，无结构化校验 |
+| 无证据固定降级话术 | `[x]` 无检索片段时固定回复 + 生成后 `[n]` 校验 |
 | 前端：verified / insufficient 状态 | `[ ]` |
 
 **验收**：每个关键论断可点开 chunk；无证据不编造。
@@ -156,10 +156,10 @@
 | A. 快速综述 | `[ ]` |
 | B. 结构化综述（研究现状） | `[~]` 当前单一综述 prompt |
 | C. 对比综述（表格） | `[ ]` |
-| D. 项目申请书（现状 / 科学问题 / 切入点 / 创新性） | `[ ]` |
+| D. 项目申请书（现状 / 科学问题 / 切入点 / 创新性） | `[x]` `template=grant_proposal` |
 | `summaries` 表参与综述（先 summary 再 chunk） | `[ ]` |
 | 按标签 / 集合 / 年份限定文献范围 | `[~]` 检索仍全库，题录筛选弱 |
-| 导出 Markdown / DOCX | `[ ]` |
+| 导出 Markdown / DOCX | `[~]` `POST /review/export-markdown`；DOCX 未做 |
 
 **验收**：一键出申请书「研究现状」初稿；段段有 `[n]`；可导出。
 

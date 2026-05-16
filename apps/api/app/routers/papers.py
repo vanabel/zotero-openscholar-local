@@ -103,6 +103,75 @@ def get_paper_pdf(paper_id: str):
     )
 
 
+_DOCUMENT_PREVIEW_MAX = 48_000
+
+
+@router.get("/{paper_id}/document")
+def get_paper_document(
+    paper_id: str,
+    max_chars: int = Query(12000, ge=500, le=_DOCUMENT_PREVIEW_MAX),
+):
+    """返回 data/parsed/{id}/document.md 预览（截断）。"""
+    from app.config import settings
+    from app.services.zotero_scanner import get_paper
+
+    p = get_paper(paper_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="未找到文献")
+    path = settings.parsed_dir / paper_id / "document.md"
+    if not path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="尚无 document.md，请先对该文献执行「建立索引」或解析。",
+        )
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"读取 document.md 失败: {e}") from e
+    total = len(text)
+    truncated = total > max_chars
+    body = text[:max_chars] if truncated else text
+    return {
+        "paper_id": paper_id,
+        "markdown": body,
+        "chars": total,
+        "truncated": truncated,
+        "path": str(path),
+    }
+
+
+@router.get("/{paper_id}/chunks")
+def list_paper_chunks(
+    paper_id: str,
+    limit: int = Query(30, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """列出该文献已索引的 chunk 预览。"""
+    from app.db import get_db, row_to_dict
+    from app.services.zotero_scanner import get_paper
+
+    if not get_paper(paper_id):
+        raise HTTPException(status_code=404, detail="未找到文献")
+    with get_db() as conn:
+        total_row = conn.execute(
+            "SELECT COUNT(*) AS c FROM chunks WHERE paper_id = ?",
+            (paper_id,),
+        ).fetchone()
+        rows = conn.execute(
+            """
+            SELECT id, paper_id, section_title, section_path, page_start, page_end,
+                   chunk_index, token_count, substr(text, 1, 400) AS text_preview
+            FROM chunks
+            WHERE paper_id = ?
+            ORDER BY chunk_index ASC
+            LIMIT ? OFFSET ?
+            """,
+            (paper_id, limit, offset),
+        ).fetchall()
+    items = [row_to_dict(r) for r in rows]
+    return {"paper_id": paper_id, "items": items, "total": int(total_row["c"]) if total_row else 0}
+
+
 @router.get("/{paper_id}")
 def get_paper_detail(paper_id: str):
     from app.services.zotero_scanner import get_paper
@@ -111,6 +180,15 @@ def get_paper_detail(paper_id: str):
     if not p:
         raise HTTPException(status_code=404, detail="未找到文献")
     return p
+
+
+@router.post("/{paper_id}/reindex-only")
+async def reindex_only_one(
+    paper_id: str,
+    wait: bool = Query(False),
+):
+    """仅重建分块/嵌入，复用已有 document.md。"""
+    return await index_one(paper_id, force=False, reindex_only=True, wait=wait)
 
 
 @router.post("/{paper_id}/index")

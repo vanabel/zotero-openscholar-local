@@ -19,19 +19,34 @@ def _normalize_text(s: str) -> str:
     return " ".join((s or "").strip().split())
 
 
-def review_cache_key(topic: str, focus: str | None, lang: str) -> str:
+def review_cache_key(
+    topic: str,
+    focus: str | None,
+    lang: str,
+    *,
+    template: str = "literature_review",
+) -> str:
     base = (
         f"{_normalize_text(topic)}\n"
         f"focus={_normalize_text(focus or '')}\n"
         f"lang={lang}\n"
+        f"template={template}\n"
         f"corpus={corpus_fingerprint()}\n"
         f"config={config_fingerprint()}"
     )
     return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
 
-def _row_cache_valid(topic_norm: str, focus_norm: str, lang: str, row_key: str, created_at: str) -> bool:
-    if review_cache_key(topic_norm, focus_norm or None, lang) != row_key:
+def _row_cache_valid(
+    topic_norm: str,
+    focus_norm: str,
+    lang: str,
+    row_key: str,
+    created_at: str,
+    *,
+    template: str = "literature_review",
+) -> bool:
+    if review_cache_key(topic_norm, focus_norm or None, lang, template=template) != row_key:
         return False
     if settings.chat_cache_ttl_sec > 0:
         created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
@@ -78,10 +93,16 @@ def list_recent_reviews(lang: str, *, limit: int = 10, pool: int = 80) -> list[d
     return valid[:limit]
 
 
-def get_cached_review(topic: str, focus: str | None, lang: str) -> dict | None:
+def get_cached_review(
+    topic: str,
+    focus: str | None,
+    lang: str,
+    *,
+    template: str = "literature_review",
+) -> dict | None:
     if not settings.chat_cache_enabled:
         return None
-    key = review_cache_key(topic, focus, lang)
+    key = review_cache_key(topic, focus, lang, template=template)
     with get_db() as conn:
         row = conn.execute(
             "SELECT payload_json, created_at FROM review_cache WHERE cache_key = ?",
@@ -105,10 +126,17 @@ def get_cached_review(topic: str, focus: str | None, lang: str) -> dict | None:
     return out
 
 
-def put_cached_review(topic: str, focus: str | None, lang: str, payload: dict) -> None:
+def put_cached_review(
+    topic: str,
+    focus: str | None,
+    lang: str,
+    payload: dict,
+    *,
+    template: str = "literature_review",
+) -> None:
     if not settings.chat_cache_enabled:
         return
-    key = review_cache_key(topic, focus, lang)
+    key = review_cache_key(topic, focus, lang, template=template)
     store = {k: v for k, v in payload.items() if k != "cached"}
     now = _utc_now()
     with get_db() as conn:

@@ -14,8 +14,10 @@ from app.services.review_cache import (
     put_cached_review,
     stream_events_from_payload as stream_review_events_from_payload,
 )
+from app.services.citation_verifier import no_evidence_answer, verify_citations
 from app.services.llm import LLMClient, build_citation_prompt, try_embed_one
 from app.services.retriever import retrieve_for_query, retrieve_limits
+from app.services.review_templates import ReviewTemplate, build_review_messages, review_to_markdown
 from app.services.translation import (
     expand_query_for_retrieval,
     stream_translate_sse_events,
@@ -70,8 +72,9 @@ async def answer_with_citations(question: str, lang: str = "zh", *, use_cache: b
     if not contexts:
         plog_info("rag", "answer 中止：无检索片段")
         return {
-            "answer": "知识库中暂无匹配片段。请先「扫描」Zotero 目录，并对文献执行「建立索引」。",
+            "answer": no_evidence_answer(lang),
             "citations": [],
+            "citation_check": {"ok": False, "reason": "no_contexts"},
         }
 
     for i, c in enumerate(contexts[:8], start=1):
@@ -82,6 +85,7 @@ async def answer_with_citations(question: str, lang: str = "zh", *, use_cache: b
     t1 = time.monotonic()
     answer = await llm.chat(messages, temperature=0.2)
     plog_info("rag", "answer LLM 完成 耗时=%.2fs", time.monotonic() - t1)
+    answer, citation_check = verify_citations(answer, contexts, lang=lang)
     citations = _citations_payload(contexts)
     answer_other: str | None = None
     answer_other_lang: str | None = None
@@ -92,7 +96,12 @@ async def answer_with_citations(question: str, lang: str = "zh", *, use_cache: b
         answer_other_lang = alt if answer_other else None
         plog_info("rag", "自动翻译 结束 target=%s ok=%s", alt, bool(answer_other))
     plog_info("rag", "answer 总耗时=%.2fs 引用条数=%s", time.monotonic() - t0, len(citations))
-    out: dict = {"answer": answer, "citations": citations, "contexts_used": len(contexts)}
+    out: dict = {
+        "answer": answer,
+        "citations": citations,
+        "contexts_used": len(contexts),
+        "citation_check": citation_check,
+    }
     if answer_other:
         out["answer_other"] = answer_other
         out["answer_other_lang"] = answer_other_lang
@@ -126,7 +135,8 @@ async def answer_with_citations_stream(
         plog_info("rag", "answer_stream 中止：无检索片段")
         yield {
             "type": "error",
-            "message": "知识库中暂无匹配片段。请先「扫描」Zotero 目录，并对文献执行「建立索引」。",
+            "message": no_evidence_answer(lang),
+            "code": "no_evidence",
         }
         return
 
@@ -144,6 +154,8 @@ async def answer_with_citations_stream(
         yield {"type": "token", "t": piece}
     plog_info("rag", "answer_stream LLM 流结束 耗时=%.2fs", time.monotonic() - t1)
     full = "".join(buf)
+    full, citation_check = verify_citations(full, contexts, lang=lang)
+    yield {"type": "citation_check", "citation_check": citation_check}
     answer_other: str | None = None
     answer_other_lang: str | None = None
     if translation_for_answer_enabled() and full.strip():
@@ -162,6 +174,7 @@ async def answer_with_citations_stream(
             "answer": full,
             "citations": _citations_payload(contexts),
             "contexts_used": len(contexts),
+            "citation_check": citation_check,
         }
         if answer_other and answer_other_lang:
             cached["answer_other"] = answer_other
@@ -173,40 +186,16 @@ def _review_query(topic: str, focus: str | None) -> str:
     return topic if not focus else f"{topic}。重点：{focus}"
 
 
-def _build_review_messages(
-    topic: str, focus: str | None, contexts: list[dict], lang: str
-) -> list[dict[str, str]]:
-    blocks = []
-    for i, c in enumerate(contexts, start=1):
-        blocks.append(
-            f"[{i}] paper_id={c['paper_id']} chunk_id={c['chunk_id']}\n"
-            f"标题: {c.get('title') or '未知'}\n"
-            f"章节: {c.get('section_path') or ''}\n"
-            f"片段:\n{c['text']}\n"
-        )
-    ctx = "\n\n".join(blocks)
-    if lang == "zh":
-        sys = (
-            "你是资深综述作者。请基于证据撰写结构化中文文献综述，"
-            "包含：背景与问题、主要方法与结果脉络、异同与争议、开放问题。"
-            "每个关键论断末尾用 [n] 引用编号。不要编造证据之外的内容。"
-        )
-        user = f"综述主题：{topic}\n补充说明：{focus or '无'}\n\n证据片段：\n{ctx}"
-    else:
-        sys = "Write a structured mini literature review with citations [n] only from evidence."
-        user = f"Topic: {topic}\nNotes: {focus or ''}\n\nEvidence:\n{ctx}"
-    return [{"role": "system", "content": sys}, {"role": "user", "content": user}]
-
-
 async def write_literature_review(
     topic: str,
     focus: str | None = None,
     lang: str = "zh",
     *,
     use_cache: bool = True,
+    template: ReviewTemplate = "literature_review",
 ) -> dict:
     if use_cache:
-        hit = get_cached_review(topic, focus, lang)
+        hit = get_cached_review(topic, focus, lang, template=template)
         if hit is not None:
             return hit
     q = _review_query(topic, focus)
@@ -221,19 +210,27 @@ async def write_literature_review(
     plog_info("review", "retrieve 完成 片段=%s 耗时=%.2fs", len(contexts), time.monotonic() - t0)
     if not contexts:
         return {
-            "review": "未检索到相关文献片段。请先完成扫描与索引。",
+            "review": no_evidence_answer(lang),
             "citations": [],
+            "citation_check": {"ok": False, "reason": "no_contexts"},
         }
 
     llm = LLMClient()
-    messages = _build_review_messages(topic, focus, contexts, lang)
+    messages = build_review_messages(topic, focus, contexts, lang, template=template)
     t1 = time.monotonic()
     review = await llm.chat(messages, temperature=0.35)
     plog_info("review", "review LLM 完成 耗时=%.2fs 输出字符=%s", time.monotonic() - t1, len(review or ""))
+    review, citation_check = verify_citations(review, contexts, lang=lang)
     citations = _citations_payload(contexts)
-    out = {"review": review, "citations": citations, "contexts_used": len(contexts)}
+    out = {
+        "review": review,
+        "citations": citations,
+        "contexts_used": len(contexts),
+        "citation_check": citation_check,
+        "template": template,
+    }
     if use_cache:
-        put_cached_review(topic, focus, lang, out)
+        put_cached_review(topic, focus, lang, out, template=template)
     return out
 
 
@@ -243,9 +240,10 @@ async def write_literature_review_stream(
     lang: str = "zh",
     *,
     use_cache: bool = True,
+    template: ReviewTemplate = "literature_review",
 ) -> AsyncIterator[dict]:
     if use_cache:
-        hit = get_cached_review(topic, focus, lang)
+        hit = get_cached_review(topic, focus, lang, template=template)
         if hit is not None:
             for ev in stream_review_events_from_payload(hit):
                 yield ev
@@ -263,7 +261,8 @@ async def write_literature_review_stream(
     if not contexts:
         yield {
             "type": "error",
-            "message": "未检索到相关文献片段。请先完成扫描与索引。",
+            "message": no_evidence_answer(lang),
+            "code": "no_evidence",
         }
         return
 
@@ -273,7 +272,7 @@ async def write_literature_review_stream(
         "contexts_used": len(contexts),
     }
     llm = LLMClient()
-    messages = _build_review_messages(topic, focus, contexts, lang)
+    messages = build_review_messages(topic, focus, contexts, lang, template=template)
     t1 = time.monotonic()
     buf: list[str] = []
     async for piece in llm.chat_stream(messages, temperature=0.35):
@@ -281,6 +280,8 @@ async def write_literature_review_stream(
         yield {"type": "token", "t": piece}
     plog_info("review", "review_stream LLM 结束 耗时=%.2fs", time.monotonic() - t1)
     full = "".join(buf)
+    full, citation_check = verify_citations(full, contexts, lang=lang)
+    yield {"type": "citation_check", "citation_check": citation_check}
     yield {"type": "done"}
     if use_cache and full.strip():
         put_cached_review(
@@ -291,5 +292,32 @@ async def write_literature_review_stream(
                 "review": full,
                 "citations": _citations_payload(contexts),
                 "contexts_used": len(contexts),
+                "citation_check": citation_check,
+                "template": template,
             },
+            template=template,
         )
+
+
+async def export_review_markdown(
+    topic: str,
+    focus: str | None = None,
+    lang: str = "zh",
+    *,
+    template: ReviewTemplate = "literature_review",
+    use_cache: bool = True,
+) -> str:
+    data = await write_literature_review(
+        topic,
+        focus=focus,
+        lang=lang,
+        use_cache=use_cache,
+        template=template,
+    )
+    return review_to_markdown(
+        data.get("review") or "",
+        topic,
+        data.get("citations") or [],
+        template=template,
+        lang=lang,
+    )

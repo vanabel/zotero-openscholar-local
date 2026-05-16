@@ -17,8 +17,22 @@ type Paper = {
   file_name?: string | null;
   parse_status: string;
   index_status: string;
+  status_message?: string | null;
   sha256: string;
   deleted: number;
+};
+
+type DocumentPreview = {
+  markdown: string;
+  chars: number;
+  truncated: boolean;
+};
+
+type ChunkPreviewRow = {
+  id: string;
+  section_path?: string | null;
+  chunk_index: number;
+  text_preview?: string | null;
 };
 
 type PapersResponse = {
@@ -132,6 +146,9 @@ export default function LibraryPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<DocumentPreview | null>(null);
+  const [previewChunks, setPreviewChunks] = useState<ChunkPreviewRow[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [paperTasks, setPaperTasks] = useState<Map<string, IndexTaskRow>>(new Map());
   const [taskPolling, setTaskPolling] = useState(false);
 
@@ -243,7 +260,25 @@ export default function LibraryPage() {
     }
   }
 
-  async function indexPaper(id: string, force: boolean) {
+  async function loadPreview(id: string) {
+    setPreviewLoading(true);
+    setPreviewDoc(null);
+    setPreviewChunks([]);
+    try {
+      const [doc, chunks] = await Promise.all([
+        apiGet<DocumentPreview>(`/papers/${encodeURIComponent(id)}/document?max_chars=8000`),
+        apiGet<{ items: ChunkPreviewRow[] }>(`/papers/${encodeURIComponent(id)}/chunks?limit=12`),
+      ]);
+      setPreviewDoc(doc);
+      setPreviewChunks(chunks.items ?? []);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "预览加载失败");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function indexPaper(id: string, force: boolean, reindexOnly = false) {
     setMsg(`提交索引 ${id.slice(0, 8)}…`);
     try {
       const res = await apiPost<{
@@ -251,7 +286,12 @@ export default function LibraryPage() {
         status?: string;
         deduped?: boolean;
         error?: string;
-      }>(`/papers/${id}/index?force=${force}`, {});
+      }>(
+        reindexOnly
+          ? `/papers/${id}/reindex-only`
+          : `/papers/${id}/index?force=${force}`,
+        {},
+      );
       setTaskPolling(true);
       setMsg(
         res.deduped
@@ -431,6 +471,9 @@ export default function LibraryPage() {
                 p.index_status === "indexing" || task?.status === "queued" || task?.status === "running"
                   ? "indexing"
                   : p.index_status;
+              const failMsg =
+                (p.status_message && p.status_message.trim()) ||
+                (task?.status === "failed" && task.error ? task.error : null);
               return (
                 <li key={p.id} className="px-4 py-3">
                   <div className="flex gap-3">
@@ -458,14 +501,29 @@ export default function LibraryPage() {
                         <StatusBadge label="索引" value={indexValue} hint={indexHint} />
                         <button
                           type="button"
-                          onClick={() => setExpandedId(expanded ? null : p.id)}
+                          onClick={() => {
+                            if (expanded) {
+                              setExpandedId(null);
+                              setPreviewDoc(null);
+                              setPreviewChunks([]);
+                            } else {
+                              setExpandedId(p.id);
+                              void loadPreview(p.id);
+                            }
+                          }}
                           className="text-xs text-ink-500 underline-offset-2 hover:text-ink-700 hover:underline"
                         >
-                          {expanded ? "收起 ID" : "查看 ID"}
+                          {expanded ? "收起详情" : "预览 / 详情"}
                         </button>
                       </div>
+                      {failMsg && (
+                        <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-900 leading-relaxed">
+                          {failMsg}
+                        </p>
+                      )}
                       {expanded && (
-                        <div className="mt-2 space-y-1 rounded bg-mist-100 px-2 py-1.5 font-mono text-[11px] text-ink-700">
+                        <div className="mt-2 space-y-3">
+                          <div className="space-y-1 rounded bg-mist-100 px-2 py-1.5 font-mono text-[11px] text-ink-700">
                           <div>
                             <span className="text-ink-500">paper_id </span>
                             {p.id}
@@ -476,6 +534,36 @@ export default function LibraryPage() {
                               {p.zotero_key}
                             </div>
                           ) : null}
+                          </div>
+                          {previewLoading ? (
+                            <p className="text-xs text-ink-600">加载 document.md / chunks…</p>
+                          ) : previewDoc ? (
+                            <div className="rounded-lg border border-mist-200 bg-mist-50 p-2">
+                              <p className="text-[11px] font-medium text-ink-600">
+                                document.md
+                                {previewDoc.truncated
+                                  ? `（前 8000 / ${previewDoc.chars} 字）`
+                                  : `（${previewDoc.chars} 字）`}
+                              </p>
+                              <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap text-[11px] text-ink-800 leading-relaxed">
+                                {previewDoc.markdown}
+                              </pre>
+                            </div>
+                          ) : null}
+                          {previewChunks.length > 0 && (
+                            <ul className="space-y-1.5 text-[11px] text-ink-700">
+                              {previewChunks.map((ch) => (
+                                <li key={ch.id} className="rounded border border-mist-200 bg-white px-2 py-1.5">
+                                  <span className="font-medium text-ink-900">
+                                    #{ch.chunk_index} {ch.section_path || ch.id.slice(0, 10)}
+                                  </span>
+                                  {ch.text_preview ? (
+                                    <p className="mt-0.5 line-clamp-3 text-ink-600">{ch.text_preview}</p>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
                       )}
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -489,10 +577,26 @@ export default function LibraryPage() {
                         <button
                           type="button"
                           className="rounded-md border border-mist-200 px-3 py-1.5 text-xs text-ink-800 hover:bg-mist-50"
+                          onClick={() => void indexPaper(p.id, false, true)}
+                        >
+                          仅重建索引
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-md border border-mist-200 px-3 py-1.5 text-xs text-ink-800 hover:bg-mist-50"
                           onClick={() => void indexPaper(p.id, true)}
                         >
                           强制重建
                         </button>
+                        {(p.index_status === "failed" || p.parse_status === "failed") && (
+                          <button
+                            type="button"
+                            className="rounded-md border border-red-200 px-3 py-1.5 text-xs text-red-800 hover:bg-red-50"
+                            onClick={() => void indexPaper(p.id, false)}
+                          >
+                            重试索引
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

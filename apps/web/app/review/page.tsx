@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import MarkdownKaTeX from "@/components/MarkdownKaTeX";
-import { apiGet, apiPost, reviewStream, type ReviewStreamEvent } from "@/lib/api";
+import {
+  apiGet,
+  apiPost,
+  downloadReviewMarkdown,
+  reviewStream,
+  type ReviewStreamEvent,
+  type ReviewTemplate,
+} from "@/lib/api";
 
 type Citation = {
   ref: number;
@@ -31,6 +38,7 @@ export default function ReviewPage() {
   const [topic, setTopic] = useState("");
   const [focus, setFocus] = useState("");
   const [lang, setLang] = useState<"zh" | "en">("zh");
+  const [template, setTemplate] = useState<ReviewTemplate>("literature_review");
   const [review, setReview] = useState("");
   const [citations, setCitations] = useState<Citation[]>([]);
   const [busy, setBusy] = useState(false);
@@ -87,6 +95,32 @@ export default function ReviewPage() {
     }
   }
 
+  async function exportMd() {
+    if (!topic.trim()) return;
+    setBusy(true);
+    setHint(null);
+    try {
+      const { blob, filename } = await downloadReviewMarkdown({
+        topic,
+        focus: focus || null,
+        lang,
+        template,
+        use_cache: true,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setHint("已下载 Markdown 文件。");
+    } catch (e) {
+      setHint(e instanceof Error ? e.message : "导出失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submit() {
     if (!topic.trim()) return;
     abortRef.current?.abort();
@@ -101,7 +135,7 @@ export default function ReviewPage() {
     try {
       if (useStream) {
         await reviewStream(
-          { topic, focus: focus || null, lang, use_cache: true },
+          { topic, focus: focus || null, lang, template, use_cache: true },
           (ev: ReviewStreamEvent) => {
             if (ev.type === "citations") {
               setCitations((ev.citations ?? []) as Citation[]);
@@ -118,6 +152,7 @@ export default function ReviewPage() {
           topic,
           focus: focus || null,
           lang,
+          template,
           use_cache: true,
         });
         setReview(res.review);
@@ -171,6 +206,17 @@ export default function ReviewPage() {
           >
             <option value="zh">中文</option>
             <option value="en">English</option>
+          </select>
+        </label>
+        <label className="inline-flex items-center gap-2">
+          <span className="text-ink-600">模板</span>
+          <select
+            value={template}
+            onChange={(e) => setTemplate(e.target.value as ReviewTemplate)}
+            className="rounded-md border border-mist-200 bg-white px-2 py-1 text-sm"
+          >
+            <option value="literature_review">结构化综述</option>
+            <option value="grant_proposal">项目申请书 · 研究现状</option>
           </select>
         </label>
       </div>
@@ -228,6 +274,14 @@ export default function ReviewPage() {
         className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
       >
         {busy ? "撰写中…" : "生成综述"}
+      </button>
+      <button
+        type="button"
+        disabled={busy || !topic.trim()}
+        onClick={() => void exportMd()}
+        className="ml-2 rounded-lg border border-mist-200 px-4 py-2 text-sm text-ink-800 hover:bg-mist-50 disabled:opacity-50"
+      >
+        导出 Markdown
       </button>
       {review && (
         <section className="rounded-xl border border-mist-200 bg-white p-4 text-sm leading-relaxed text-ink-900">

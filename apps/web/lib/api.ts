@@ -1,9 +1,29 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
+function parseApiErrorText(raw: string, status: number): string {
+  try {
+    const j = JSON.parse(raw) as {
+      error?: { message?: string; code?: string };
+      detail?: string | { message?: string };
+    };
+    if (j?.error?.message) {
+      const code = j.error.code ? `[${j.error.code}] ` : "";
+      return `${code}${j.error.message}`;
+    }
+    if (typeof j.detail === "string") return j.detail;
+    if (j.detail && typeof j.detail === "object" && "message" in j.detail) {
+      return String((j.detail as { message?: string }).message);
+    }
+  } catch {
+    /* 非 JSON */
+  }
+  return raw.trim() || `HTTP ${status}`;
+}
+
 async function handle(res: Response) {
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(t || res.statusText);
+    throw new Error(parseApiErrorText(t, res.status));
   }
   return res.json();
 }
@@ -99,15 +119,43 @@ export async function chatStream(
   await consumeSse<ChatStreamEvent>(res, onEvent);
 }
 
+export type ReviewTemplate = "literature_review" | "grant_proposal";
+
 export type ReviewStreamEvent =
   | { type: "citations"; citations: unknown[]; contexts_used?: number }
   | { type: "token"; t: string }
+  | { type: "citation_check"; citation_check?: unknown }
   | { type: "done" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; code?: string };
 
 /** POST /review/stream（SSE） */
+export async function downloadReviewMarkdown(
+  body: { topic: string; focus?: string | null; lang: string; template?: ReviewTemplate; use_cache?: boolean },
+): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(`${BASE}/review/export-markdown`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/markdown" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(parseApiErrorText(t, res.status));
+  }
+  const disp = res.headers.get("Content-Disposition") || "";
+  const m = /filename="([^"]+)"/.exec(disp);
+  const filename = m?.[1] ?? "review.md";
+  const blob = await res.blob();
+  return { blob, filename };
+}
+
 export async function reviewStream(
-  body: { topic: string; focus?: string | null; lang: string; use_cache?: boolean },
+  body: {
+    topic: string;
+    focus?: string | null;
+    lang: string;
+    use_cache?: boolean;
+    template?: ReviewTemplate;
+  },
   onEvent: (ev: ReviewStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
