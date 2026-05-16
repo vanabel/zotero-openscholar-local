@@ -60,7 +60,7 @@
 | 双语检索 / 答案（可选） | `[x]` |
 | Next.js：概览、文献库、问答、综述、设置 | `[x]` |
 | `CHAT_PROVIDER` / `EMBED_PROVIDER` 分离 + `OPENAI_EMBED_MODEL` | `[x]` 见 `.env.example` 组合表 |
-| 文献库索引：后台任务队列 + 轮询进度 | `[~]` 见 P6 |
+| 文献库索引：后台任务队列 + 轮询进度 | `[x]` 见 P6 |
 
 ---
 
@@ -74,7 +74,7 @@
 | 文献库：parse/index 失败原因、重试、仅重建索引 | `[~]` `status_message`、重试/仅重建索引按钮；parse 失败仍弱 |
 | document.md / chunk 预览 | `[x]` `GET /papers/{id}/document`、`/chunks` + 文献库展开预览 |
 | 最小回归集 fixture（3 英 + 3 中 + 扫描 + 公式 + 图表） | `[x]` 见 [docs/QUALITY_BASELINE.md](./docs/QUALITY_BASELINE.md) |
-| CI：`pnpm test` 默认绿，Ollama/MinerU 标 optional | `[ ]` |
+| CI：`pnpm test` 默认绿，Ollama/MinerU 标 optional | `[x]` `.github/workflows/ci.yml`；`@pytest.mark.optional`；`pnpm test:api:optional` |
 
 **验收**：不启 Ollama 时 API 返回明确 JSON；`pnpm test` 默认通过。
 
@@ -86,13 +86,29 @@
 
 | 任务 | 状态 |
 |------|------|
-| `parse_reports` 表 + `parse_quality_score` | `[ ]` |
-| 统计：页数、章节、公式/表/图、OCR 比例、乱码比例 | `[ ]` |
+| `parse_reports` 表 + `parse_quality_score` | `[x]` `parse_quality.py` + `papers.parse_quality_score` |
+| 统计：页数、章节、公式/表/图、OCR 比例、乱码比例 | `[x]` 写入 `parse_reports` |
 | Markdown 清洗（页眉页脚、断行、参考文献区） | `[ ]` |
-| 前端：section tree、质量分、警告、低质量筛选 | `[ ]` |
+| 前端：section tree、质量分、警告、低质量筛选 | `[x]` 文献库质量徽章、`/papers/quality-summary`、低质量/未评分筛选 |
 | 低分重试（cloud / OCR） | `[ ]` |
 
-**验收**：可筛低质量 PDF；`force` 不覆盖更高分结果。
+### 「质量 未评分」何时更新
+
+`papers.parse_quality_score` 为 `NULL` 时，文献库显示 **未评分**。写入路径**唯一**：`indexing.index_paper` 在 **`need_parse=true`**（实际跑 MinerU / cloud / pypdf）成功后调用 `analyze_markdown` + `save_parse_report`（`parse_quality.py`）。
+
+| 用户操作 / 条件 | 质量分 |
+|-----------------|--------|
+| 仅扫描、未索引 | 保持未评分 |
+| 建立索引（含首次解析） | 写入 |
+| `force=true` 强制重建 | 重新解析后写入（新分覆盖旧分；低于旧分会 `plog` 提示但仍保存） |
+| `reindex_only=true` 仅重建索引 | **不**更新（复用 `document.md`，只重做 chunk / 嵌入） |
+| 索引复用缓存 Markdown（PDF 未变、`need_parse=false`） | 不重新评分（历史上从未评分的仍为未评分） |
+| 升级前已索引的旧数据 | 仍为未评分，需带解析的索引或 `force` 补分 |
+
+筛选：`parse_quality_missing` → `parse_quality_score IS NULL`（`zotero_scanner.list_papers`）。低分默认 `parse_quality_lte=0.65`。详见 [README.md](./README.md)「解析质量分」。
+
+**验收**：可筛低质量与未评分文献；带解析的索引可生成/刷新分；`reindex_only` 不改变质量分。  
+**待办**：`force` 解析若低于历史分仍覆盖 — 可选改为「仅当新分更高时更新 `papers.parse_quality_score`」。
 
 ---
 
@@ -102,11 +118,11 @@
 
 | 任务 | 状态 |
 |------|------|
-| `chunk_type`（abstract / theorem / proof / references …） | `[ ]` |
-| `chunk_quality_score`、`content_hash` | `[ ]` |
+| `chunk_type`（abstract / theorem / proof / references …） | `[x]` `chunk_quality.py` |
+| `chunk_quality_score`、`content_hash` | `[x]` 索引时写入 |
 | `section_path` 结构化（JSON 路径） | `[~]` 已有字符串 `section_path` |
-| Chunk 去重（页眉页脚、切片重复） | `[ ]` |
-| references-only 不参与普通问答 | `[ ]` |
+| Chunk 去重（页眉页脚、切片重复） | `[x]` `dedupe_chunk_drafts` 索引级 |
+| references-only 不参与普通问答 | `[x]` 检索默认排除 `chunk_type=references` |
 | 前端：chunk 来源（标题 + section + 页码） | `[~]` 引用卡片有部分字段 |
 
 **验收**：同段不重复进 top-k；定理类可单独检索。
@@ -121,7 +137,7 @@
 |------|------|
 | 跨篇配额 `RETRIEVE_MAX_CHUNKS_PER_PAPER` | `[x]` |
 | 最多文献数 `RETRIEVE_MAX_PAPERS` | `[x]` |
-| Chunk 内容去重（检索结果级） | `[x]` `dedupe_chunks_by_text` in `retriever.py` |
+| Chunk 内容去重（检索结果级） | `[x]` `dedupe_chunks_by_text`（`retriever.py`） |
 | 查询扩展 / 专名同义词 | `[~]` 双语 Hy-MT 扩展已有 |
 | `eval_queries.jsonl` + 评测脚本 | `[ ]` |
 | LanceDB 替代 SQLite 全表 dense 扫描 | `[ ]` |
@@ -138,10 +154,10 @@
 | 任务 | 状态 |
 |------|------|
 | Evidence locking（`[CHUNK:id]`） | `[~]` prompt 含 chunk_id，未强制对齐 |
-| `CitationVerifier`（存在性、关键词、无引用断言） | `[~]` `citation_verifier.py`：`[n]` 越界校验；claim 拆分未做 |
-| `answer_citations` 表 + claim 拆分 | `[ ]` |
+| `CitationVerifier`（存在性、关键词、无引用断言） | `[x]` claim 拆分 + 关键词重叠 |
+| `answer_citations` 表 + claim 拆分 | `[x]` 生成后写入；API 返回 `claims` |
 | 无证据固定降级话术 | `[x]` 无检索片段时固定回复 + 生成后 `[n]` 校验 |
-| 前端：verified / insufficient 状态 | `[ ]` |
+| 前端：verified / insufficient 状态 | `[x]` 问答/综述引用卡片徽章 + 论断核验列表 |
 
 **验收**：每个关键论断可点开 chunk；无证据不编造。
 
@@ -157,9 +173,9 @@
 | B. 结构化综述（研究现状） | `[~]` 当前单一综述 prompt |
 | C. 对比综述（表格） | `[ ]` |
 | D. 项目申请书（现状 / 科学问题 / 切入点 / 创新性） | `[x]` `template=grant_proposal` |
-| `summaries` 表参与综述（先 summary 再 chunk） | `[ ]` |
-| 按标签 / 集合 / 年份限定文献范围 | `[~]` 检索仍全库，题录筛选弱 |
-| 导出 Markdown / DOCX | `[~]` `POST /review/export-markdown`；DOCX 未做 |
+| `summaries` 表参与综述（先 summary 再 chunk） | `[x]` `summaries.py` 综述检索优先 |
+| 按标签 / 集合 / 年份限定文献范围 | `[x]` `RetrievalScope` + 问答/综述请求体 |
+| 导出 Markdown / DOCX | `[x]` `export-markdown` + `export-docx`（python-docx） |
 
 **验收**：一键出申请书「研究现状」初稿；段段有 `[n]`；可导出。
 

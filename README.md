@@ -12,12 +12,15 @@
 |------|------|
 | Zotero PDF 扫描 | 递归 `storage` 目录，`sha256` / 大小 / `mtime` 增量；删除文件标记 `deleted` |
 | 解析 | MinerU 3.x（CLI / 常驻 `mineru-api` / **在线 cloud**）或 **pypdf** 降级 |
-| 索引 | Markdown 标题分块；Ollama/OpenAI 嵌入；可选 **OpenScholar 稠密向量**（`scholar_embedding_json`） |
-| 检索 | FTS5 召回；多查询合并（双语扩展）；**RRF** 融合 FTS + dense；OpenScholar **Reranker** 或 Ollama 余弦重排 |
-| 问答 / 综述 | 引用式提示 `[1][2]`；**SSE 流式**；可选**双语**检索与答案 |
+| 索引 | Markdown 标题分块；`chunk_type` / 质量分 / 去重；Ollama/OpenAI 嵌入；可选 **OpenScholar 稠密向量**（`scholar_embedding_json`）；默认 **202 异步** + 任务进度 |
+| 解析质量 | 解析完成后对 `document.md` 启发式评分（0–1）；文献库显示「质量 xx%」或 **未评分**；可筛低分 / 未评分 |
+| 检索 | FTS5 召回；多查询合并（双语扩展）；**RRF** 融合 FTS + dense；OpenScholar **Reranker** 或 Ollama 余弦重排；默认排除 `references` 类 chunk |
+| 文献范围 | 问答 / 综述可按 **标签、集合、年份** 限定检索（`RetrievalScope`）；综述优先 `summaries` |
+| 问答 / 综述 | 引用式提示 `[1][2]`；**SSE 流式**；可选**双语**检索与答案；**论断核验**（verified / 证据不足） |
+| 综述模板 | 通用综述 + **项目申请书**（`template=grant_proposal`）；导出 **Markdown / DOCX** |
 | 缓存 | 问答 / 综述 SQLite 缓存；近期问题 / 主题快捷填入 |
-| 前端 | Next.js 14：概览、文献库（搜索、批量索引）、问答、综述、设置 |
-| 工程 | 根目录 `pnpm`/`npm` + `concurrently`；`pytest`；可选 PM2 |
+| 前端 | Next.js 14：概览、文献库（搜索、质量筛选、预览、批量索引与进度）、问答、综述、设置 |
+| 工程 | 根目录 `pnpm`/`npm` + `concurrently`；`pytest`（默认跳过 Ollama/MinerU）；GitHub **CI**；可选 PM2 |
 
 ---
 
@@ -55,8 +58,9 @@ pnpm dev          # mineru-api + API :8000 + Web :3000
 未安装 MinerU 时：`pnpm run dev:no-mineru`（仅 API + Web）。
 
 ```bash
-pnpm test                              # API pytest
-RUN_OLLAMA_TRANSLATION_TEST=1 pnpm test   # 可选：Hy-MT 翻译冒烟（需本机 Ollama）
+pnpm test                    # API pytest（`-m 'not optional'`）
+pnpm run test:api:optional   # 需本机 Ollama / MinerU 的可选用例
+RUN_OLLAMA_TRANSLATION_TEST=1 pnpm run test:api:optional
 ```
 
 ### npm
@@ -73,6 +77,22 @@ npm install && npm run setup && npm run dev
 1. **设置** — 确认 Zotero PDF 目录（默认 `~/Zotero/storage`）。
 2. **文献库** — 「扫描磁盘」→ 勾选文献 → 「批量 MinerU 索引」（或单篇「建立索引」）。
 3. **问答 / 综述** — 正文中的 `[1][2]` 对应引用卡片。
+
+### 解析质量分（「质量 未评分」）
+
+文献库徽章 **质量** 来自 `papers.parse_quality_score`（0–1，界面为百分比）。**未评分** 表示该列为 `NULL`（`GET /papers?parse_quality_missing=true` 可筛）。
+
+| 操作 | 是否写入 / 更新质量分 |
+|------|------------------------|
+| 扫描磁盘 | 否 |
+| **建立索引**（会跑 MinerU / cloud / pypdf） | **是** — `analyze_markdown` → `parse_reports` + 更新 `papers.parse_quality_score` |
+| **强制重建**（`force=true`，清空 parsed 后重解析） | **是**（新分覆盖旧分；若低于历史分会打日志但仍写入） |
+| **仅重建索引**（`reindex_only=true`，复用 `document.md`） | **否** — 只重做分块与嵌入 |
+| 索引复用本地 Markdown（未改 PDF、跳过 MinerU） | 否（除非该次走了「建立索引」里的解析分支） |
+
+评分依据（`apps/api/app/services/parse_quality.py`）：Markdown 长度、章节数、公式/表/图数量，以及对乱码比例、OCR 碎片行、过短正文等的惩罚；可选警告码如 `markdown_too_short`、`high_garbled_ratio`。低质量默认阈值 **0.65**（与文献库筛选一致）。
+
+仍为 **未评分** 时：对文献执行带解析的「建立索引」或「强制重建」；旧库在引入该功能前已索引的文献也需 **强制重建** 补分。详情：`GET /papers/{id}/parse-report`；全库摘要 `GET /papers/quality-summary`。
 
 ---
 
@@ -211,15 +231,23 @@ pnpm run download:mineru-models
 | GET | `/health` | 健康检查 |
 | GET | `/stats` | 文献 / 索引 / 片段统计 |
 | POST | `/scan` | 扫描 Zotero storage（增量） |
-| GET | `/papers?q=` | 文献列表（标题、路径、作者字段搜索） |
-| POST | `/papers/{id}/index` | 解析 + 分块 + 嵌入 + FTS；`force=true` 清空 parsed 后重跑 |
+| POST | `/papers/sync-zotero-metadata` | 从本机 `zotero.sqlite` 同步题录（标签、集合、年份等） |
+| GET | `/papers?q=` | 文献列表（标题、路径、作者字段搜索）；`parse_quality_lte` / `parse_quality_gte` / `parse_quality_missing` |
+| GET | `/papers/quality-summary` | 全库解析质量分布（低分 / 未评分 / 高分篇数） |
+| GET | `/papers/{id}/parse-report` | 单篇解析质量报告（无报告时 404） |
+| POST | `/papers/{id}/index` | 解析 + 分块 + 嵌入 + FTS；默认 **202** + `task_id`；`wait=true` 同步 |
 | POST | `/papers/{id}/index?reindex_only=true` | 仅重建分块/嵌入/FTS，复用 Markdown |
+| POST | `/papers/{id}/reindex-only` | 同上（便捷路径） |
 | POST | `/papers/index-batch` | 批量索引；body 可含 `reindex_only` |
-| POST | `/chat` | 问答（JSON） |
+| GET | `/tasks/active` | 进行中的索引任务 |
+| GET | `/tasks/{id}` | 单任务状态与 `progress_json` |
+| POST | `/chat` | 问答（JSON）；body 可含 `tags_any` / `collections_any` / `years_min` / `years_max`；返回 `claims` |
 | POST | `/chat/stream` | 问答流式（SSE：`citations` → `token` → 可选 `bilingual*` → `done`） |
 | GET | `/chat/recent` | 近期提问 |
-| POST | `/review` | 综述 |
+| POST | `/review` | 综述；`template=literature_review` \| `grant_proposal` |
 | POST | `/review/stream` | 综述流式 |
+| POST | `/review/export-markdown` | 导出综述 Markdown |
+| POST | `/review/export-docx` | 导出综述 DOCX（需 `python-docx`） |
 | GET | `/review/recent` | 近期综述主题 |
 | GET/PUT | `/settings` | Zotero 路径等 |
 | GET | `/chunks/{id}` | 片段详情 |
@@ -232,8 +260,10 @@ pnpm run download:mineru-models
 
 ```bash
 pnpm test
-RUN_OLLAMA_TRANSLATION_TEST=1 pnpm test   # 需 Ollama + Hy-MT
+pnpm run test:api:optional   # 需 Ollama + Hy-MT 等
 ```
+
+推送至 `main` / `master` 时 GitHub Actions 运行默认 `pytest`（见 `.github/workflows/ci.yml`）。
 
 **PM2**（长期运行，非热重载开发）：
 
