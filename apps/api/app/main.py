@@ -53,6 +53,9 @@ async def lifespan(app: FastAPI):
     from app.services.index_reconcile import reconcile_database_on_startup
 
     reconcile_database_on_startup()
+    from app.services.db_maintenance import maybe_vacuum_database_on_startup
+
+    maybe_vacuum_database_on_startup()
     _log_openscholar_startup()
     start_worker()
     yield

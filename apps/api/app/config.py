@@ -123,6 +123,12 @@ class Settings(BaseSettings):
     # mineru CLI 轮询 mineru-api 任务状态的间隔（秒）；hybrid 每步约 20s+ 时默认 8 可减少 access log
     mineru_task_poll_interval_sec: float = Field(default=8.0, ge=1.0, le=120.0, validation_alias="MINERU_TASK_POLL_INTERVAL_SEC")
 
+    # 启动时 SQLite VACUUM：强制每次执行，或 freelist/page_count ≥ 比例阈值时自动执行
+    db_vacuum_on_startup: bool = Field(default=False, validation_alias="DB_VACUUM_ON_STARTUP")
+    db_vacuum_freelist_ratio: float = Field(
+        default=0.25, ge=0.0, le=1.0, validation_alias="DB_VACUUM_FREELIST_RATIO"
+    )
+
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     pipeline_log: int = Field(default=0, ge=0, le=2, validation_alias="PIPELINE_LOG")
     log_stages: str = Field(default="", validation_alias="LOG_STAGES")

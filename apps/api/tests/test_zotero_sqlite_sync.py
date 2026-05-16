@@ -162,7 +162,7 @@ def _create_minimal_zotero_db(path: Path) -> None:
 
 def test_sync_zotero_metadata_updates_paper(monkeypatch, tmp_path) -> None:
     data_dir = tmp_path / "data"
-    data_dir.mkdir()
+    data_dir.mkdir(parents=True, exist_ok=True)
     storage = tmp_path / "zstorage"
     key_dir = storage / "KEYFOLDER1"
     key_dir.mkdir(parents=True)

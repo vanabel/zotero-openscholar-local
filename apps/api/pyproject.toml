@@ -36,6 +36,7 @@ where = ["."]
 include = ["app*"]
 
 [tool.pytest.ini_options]
+# 每测 DATA_DIR 见 tests/conftest.py（autouse 临时目录），勿对开发库跑 pytest。
 markers = [
   "optional: 需要本机 Ollama / MinerU 等外部服务（CI 默认跳过）",
   "ollama: 需要 Ollama",
