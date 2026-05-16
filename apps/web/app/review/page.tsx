@@ -5,10 +5,14 @@ import MarkdownKaTeX from "@/components/MarkdownKaTeX";
 import {
   apiGet,
   apiPost,
+  downloadReviewDocx,
   downloadReviewMarkdown,
   reviewStream,
+  type ClaimRecord,
   type ReviewStreamEvent,
   type ReviewTemplate,
+  type RetrievalScopeBody,
+  type VerificationStatus,
 } from "@/lib/api";
 
 type Citation = {
@@ -18,7 +22,27 @@ type Citation = {
   title?: string | null;
   section_path?: string | null;
   preview?: string;
+  verification_status?: VerificationStatus | string;
 };
+
+function parseScopeList(raw: string): string[] | undefined {
+  const items = raw
+    .split(/[,，;；]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return items.length ? items : undefined;
+}
+
+function verificationLabel(status?: string): { text: string; className: string } {
+  switch (status) {
+    case "verified":
+      return { text: "已核验", className: "bg-emerald-100 text-emerald-800" };
+    case "insufficient":
+      return { text: "证据不足", className: "bg-amber-100 text-amber-900" };
+    default:
+      return { text: "未使用", className: "bg-mist-100 text-ink-600" };
+  }
+}
 
 type RecentItem = {
   topic: string;
@@ -45,7 +69,21 @@ export default function ReviewPage() {
   const [useStream, setUseStream] = useState(true);
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [hint, setHint] = useState<string | null>(null);
+  const [tagsFilter, setTagsFilter] = useState("");
+  const [collectionsFilter, setCollectionsFilter] = useState("");
+  const [yearsMin, setYearsMin] = useState("");
+  const [yearsMax, setYearsMax] = useState("");
+  const [claims, setClaims] = useState<ClaimRecord[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+
+  function scopeBody(): RetrievalScopeBody {
+    return {
+      tags: parseScopeList(tagsFilter),
+      collections: parseScopeList(collectionsFilter),
+      years_min: yearsMin ? Number(yearsMin) : undefined,
+      years_max: yearsMax ? Number(yearsMax) : undefined,
+    };
+  }
 
   const loadRecent = useCallback(async () => {
     try {
@@ -106,6 +144,7 @@ export default function ReviewPage() {
         lang,
         template,
         use_cache: true,
+        ...scopeBody(),
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -121,6 +160,33 @@ export default function ReviewPage() {
     }
   }
 
+  async function exportDocx() {
+    if (!topic.trim()) return;
+    setBusy(true);
+    setHint(null);
+    try {
+      const { blob, filename } = await downloadReviewDocx({
+        topic,
+        focus: focus || null,
+        lang,
+        template,
+        use_cache: true,
+        ...scopeBody(),
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setHint("已下载 DOCX 文件。");
+    } catch (e) {
+      setHint(e instanceof Error ? e.message : "DOCX 导出失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submit() {
     if (!topic.trim()) return;
     abortRef.current?.abort();
@@ -130,15 +196,18 @@ export default function ReviewPage() {
     setBusy(true);
     setReview("");
     setCitations([]);
+    setClaims([]);
     setHint(null);
 
     try {
       if (useStream) {
         await reviewStream(
-          { topic, focus: focus || null, lang, template, use_cache: true },
+          { topic, focus: focus || null, lang, template, use_cache: true, ...scopeBody() },
           (ev: ReviewStreamEvent) => {
             if (ev.type === "citations") {
               setCitations((ev.citations ?? []) as Citation[]);
+            } else if (ev.type === "claims") {
+              setClaims(ev.claims ?? []);
             } else if (ev.type === "token") {
               setReview((prev) => prev + (ev.t ?? ""));
             } else if (ev.type === "error") {
@@ -148,15 +217,20 @@ export default function ReviewPage() {
           ac.signal,
         );
       } else {
-        const res = await apiPost<{ review: string; citations: Citation[] }>("/review", {
-          topic,
-          focus: focus || null,
-          lang,
-          template,
-          use_cache: true,
-        });
+        const res = await apiPost<{ review: string; citations: Citation[]; claims?: ClaimRecord[] }>(
+          "/review",
+          {
+            topic,
+            focus: focus || null,
+            lang,
+            template,
+            use_cache: true,
+            ...scopeBody(),
+          },
+        );
         setReview(res.review);
         setCitations(res.citations ?? []);
+        setClaims(res.claims ?? []);
       }
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -266,6 +340,37 @@ export default function ReviewPage() {
         value={focus}
         onChange={(e) => setFocus(e.target.value)}
       />
+      <div className="grid gap-2 rounded-xl border border-mist-200 bg-mist-50 p-3 text-sm">
+        <span className="text-xs font-semibold uppercase tracking-wide text-ink-500">检索范围（可选）</span>
+        <input
+          className="w-full rounded-md border border-mist-200 bg-white px-2 py-1.5 text-sm"
+          placeholder="Zotero 标签，逗号分隔"
+          value={tagsFilter}
+          onChange={(e) => setTagsFilter(e.target.value)}
+        />
+        <input
+          className="w-full rounded-md border border-mist-200 bg-white px-2 py-1.5 text-sm"
+          placeholder="Zotero 集合名，逗号分隔"
+          value={collectionsFilter}
+          onChange={(e) => setCollectionsFilter(e.target.value)}
+        />
+        <div className="flex flex-wrap gap-2">
+          <input
+            className="w-28 rounded-md border border-mist-200 bg-white px-2 py-1.5 text-sm"
+            placeholder="年份 ≥"
+            value={yearsMin}
+            onChange={(e) => setYearsMin(e.target.value)}
+            inputMode="numeric"
+          />
+          <input
+            className="w-28 rounded-md border border-mist-200 bg-white px-2 py-1.5 text-sm"
+            placeholder="年份 ≤"
+            value={yearsMax}
+            onChange={(e) => setYearsMax(e.target.value)}
+            inputMode="numeric"
+          />
+        </div>
+      </div>
       {hint && <p className="text-xs text-ink-600">{hint}</p>}
       <button
         type="button"
@@ -282,6 +387,14 @@ export default function ReviewPage() {
         className="ml-2 rounded-lg border border-mist-200 px-4 py-2 text-sm text-ink-800 hover:bg-mist-50 disabled:opacity-50"
       >
         导出 Markdown
+      </button>
+      <button
+        type="button"
+        disabled={busy || !topic.trim()}
+        onClick={() => void exportDocx()}
+        className="ml-2 rounded-lg border border-mist-200 px-4 py-2 text-sm text-ink-800 hover:bg-mist-50 disabled:opacity-50"
+      >
+        导出 DOCX
       </button>
       {review && (
         <section className="rounded-xl border border-mist-200 bg-white p-4 text-sm leading-relaxed text-ink-900">

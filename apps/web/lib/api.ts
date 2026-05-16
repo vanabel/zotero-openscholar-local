@@ -60,12 +60,33 @@ export type BilingualStreamEvent =
   | { type: "bilingual_token"; lang: BilingualLang; t: string }
   | { type: "bilingual"; lang: BilingualLang; text: string };
 
+export type VerificationStatus = "verified" | "insufficient" | "unused" | "invalid_ref" | "unreferenced";
+
+export type ClaimRecord = {
+  claim_text: string;
+  chunk_id?: string | null;
+  ref_num?: number | null;
+  verified?: boolean;
+  verifier_score?: number;
+  status: VerificationStatus | string;
+};
+
 export type ChatStreamEvent =
   | { type: "citations"; citations: unknown[]; contexts_used?: number }
+  | { type: "citation_check"; citation_check?: unknown }
+  | { type: "claims"; claims?: ClaimRecord[] }
   | { type: "token"; t: string }
   | BilingualStreamEvent
   | { type: "done" }
   | { type: "error"; message: string };
+
+export type RetrievalScopeBody = {
+  paper_ids?: string[] | null;
+  tags?: string[] | null;
+  collections?: string[] | null;
+  years_min?: number | null;
+  years_max?: number | null;
+};
 
 export type TranslateStreamEvent = BilingualStreamEvent | { type: "done" } | { type: "error"; message: string };
 
@@ -106,7 +127,7 @@ async function consumeSse<T>(res: Response, onEvent: (ev: T) => void): Promise<v
 
 /** POST /chat/stream（SSE） */
 export async function chatStream(
-  body: { question: string; lang: string },
+  body: { question: string; lang: string } & RetrievalScopeBody,
   onEvent: (ev: ChatStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -125,12 +146,19 @@ export type ReviewStreamEvent =
   | { type: "citations"; citations: unknown[]; contexts_used?: number }
   | { type: "token"; t: string }
   | { type: "citation_check"; citation_check?: unknown }
+  | { type: "claims"; claims?: ClaimRecord[] }
   | { type: "done" }
   | { type: "error"; message: string; code?: string };
 
 /** POST /review/stream（SSE） */
 export async function downloadReviewMarkdown(
-  body: { topic: string; focus?: string | null; lang: string; template?: ReviewTemplate; use_cache?: boolean },
+  body: {
+    topic: string;
+    focus?: string | null;
+    lang: string;
+    template?: ReviewTemplate;
+    use_cache?: boolean;
+  } & RetrievalScopeBody,
 ): Promise<{ blob: Blob; filename: string }> {
   const res = await fetch(`${BASE}/review/export-markdown`, {
     method: "POST",
@@ -148,6 +176,31 @@ export async function downloadReviewMarkdown(
   return { blob, filename };
 }
 
+export async function downloadReviewDocx(
+  body: {
+    topic: string;
+    focus?: string | null;
+    lang: string;
+    template?: ReviewTemplate;
+    use_cache?: boolean;
+  } & RetrievalScopeBody,
+): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(`${BASE}/review/export-docx`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(parseApiErrorText(t, res.status));
+  }
+  const disp = res.headers.get("Content-Disposition") || "";
+  const m = /filename="([^"]+)"/.exec(disp);
+  const filename = m?.[1] ?? "review.docx";
+  const blob = await res.blob();
+  return { blob, filename };
+}
+
 export async function reviewStream(
   body: {
     topic: string;
@@ -155,7 +208,7 @@ export async function reviewStream(
     lang: string;
     use_cache?: boolean;
     template?: ReviewTemplate;
-  },
+  } & RetrievalScopeBody,
   onEvent: (ev: ReviewStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {

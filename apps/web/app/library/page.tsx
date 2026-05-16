@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, API_BASE } from "@/lib/api";
 
+const LOW_QUALITY_THRESHOLD = 0.65;
+
 type Paper = {
   id: string;
   zotero_key?: string | null;
@@ -18,8 +20,37 @@ type Paper = {
   parse_status: string;
   index_status: string;
   status_message?: string | null;
+  parse_quality_score?: number | null;
   sha256: string;
   deleted: number;
+};
+
+type QualityFilter = "all" | "low" | "unscored" | "high";
+type SortMode = "updated" | "quality_asc" | "quality_desc";
+
+type ParseReport = {
+  parse_quality_score?: number | null;
+  text_length?: number | null;
+  page_count?: number | null;
+  detected_sections?: number | null;
+  formula_blocks?: number | null;
+  table_blocks?: number | null;
+  image_blocks?: number | null;
+  ocr_ratio?: number | null;
+  suspicious_garbled_ratio?: number | null;
+  references_detected?: number | boolean | null;
+  warnings?: string[];
+  parser?: string | null;
+  parser_mode?: string | null;
+  created_at?: string | null;
+};
+
+type QualitySummary = {
+  total: number;
+  unscored: number;
+  low_quality: number;
+  high_quality: number;
+  low_quality_threshold: number;
 };
 
 type DocumentPreview = {
@@ -40,6 +71,48 @@ type PapersResponse = {
   total: number;
   q: string | null;
 };
+
+const WARNING_LABELS: Record<string, string> = {
+  markdown_too_short: "Markdown 过短",
+  high_garbled_ratio: "乱码比例偏高",
+  high_ocr_fragment_ratio: "OCR 碎片偏多",
+  few_sections: "章节结构过少",
+};
+
+function formatQualityScore(score: number | null | undefined): string {
+  if (score == null || Number.isNaN(score)) return "未评分";
+  return `${Math.round(score * 100)}%`;
+}
+
+function qualityTone(score: number | null | undefined): {
+  label: string;
+  className: string;
+} {
+  if (score == null || Number.isNaN(score)) {
+    return { label: "未评分", className: "bg-mist-100 text-ink-600" };
+  }
+  if (score >= 0.85) return { label: formatQualityScore(score), className: "bg-emerald-50 text-emerald-800" };
+  if (score >= LOW_QUALITY_THRESHOLD) {
+    return { label: formatQualityScore(score), className: "bg-amber-50 text-amber-900" };
+  }
+  return { label: formatQualityScore(score), className: "bg-red-50 text-red-800" };
+}
+
+function ParseQualityBadge({ score }: { score: number | null | undefined }) {
+  const tone = qualityTone(score);
+  return (
+    <span
+      className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${tone.className}`}
+      title="解析质量分（索引后由 MinerU Markdown 统计）"
+    >
+      质量 {tone.label}
+    </span>
+  );
+}
+
+function warningLabel(code: string): string {
+  return WARNING_LABELS[code] ?? code;
+}
 
 function parseJsonStringList(raw: string | null | undefined): string[] {
   if (!raw || !String(raw).trim()) return [];
@@ -141,6 +214,9 @@ export default function LibraryPage() {
   const [total, setTotal] = useState(0);
   const [searchInput, setSearchInput] = useState("");
   const [searchQ, setSearchQ] = useState("");
+  const [qualityFilter, setQualityFilter] = useState<QualityFilter>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("updated");
+  const [qualitySummary, setQualitySummary] = useState<QualitySummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -148,6 +224,7 @@ export default function LibraryPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentPreview | null>(null);
   const [previewChunks, setPreviewChunks] = useState<ChunkPreviewRow[]>([]);
+  const [previewReport, setPreviewReport] = useState<ParseReport | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [paperTasks, setPaperTasks] = useState<Map<string, IndexTaskRow>>(new Map());
   const [taskPolling, setTaskPolling] = useState(false);
@@ -160,11 +237,18 @@ export default function LibraryPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const qs = new URLSearchParams({ limit: "5000" });
+      const qs = new URLSearchParams({ limit: "5000", sort: sortMode });
       if (searchQ) qs.set("q", searchQ);
-      const data = await apiGet<PapersResponse>(`/papers?${qs.toString()}`);
+      if (qualityFilter === "low") qs.set("parse_quality_lte", String(LOW_QUALITY_THRESHOLD));
+      else if (qualityFilter === "unscored") qs.set("parse_quality_missing", "true");
+      else if (qualityFilter === "high") qs.set("parse_quality_gte", "0.85");
+      const [data, summary] = await Promise.all([
+        apiGet<PapersResponse>(`/papers?${qs.toString()}`),
+        apiGet<QualitySummary>("/papers/quality-summary"),
+      ]);
       setItems(data.items);
       setTotal(data.total);
+      setQualitySummary(summary);
       setSelected((prev) => {
         const ids = new Set(data.items.map((p) => p.id));
         const next = new Set<string>();
@@ -179,7 +263,7 @@ export default function LibraryPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQ]);
+  }, [searchQ, qualityFilter, sortMode]);
 
   useEffect(() => {
     void refresh();
@@ -264,13 +348,16 @@ export default function LibraryPage() {
     setPreviewLoading(true);
     setPreviewDoc(null);
     setPreviewChunks([]);
+    setPreviewReport(null);
     try {
-      const [doc, chunks] = await Promise.all([
+      const [doc, chunks, report] = await Promise.all([
         apiGet<DocumentPreview>(`/papers/${encodeURIComponent(id)}/document?max_chars=8000`),
         apiGet<{ items: ChunkPreviewRow[] }>(`/papers/${encodeURIComponent(id)}/chunks?limit=12`),
+        apiGet<ParseReport>(`/papers/${encodeURIComponent(id)}/parse-report`).catch(() => null),
       ]);
       setPreviewDoc(doc);
       setPreviewChunks(chunks.items ?? []);
+      setPreviewReport(report);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "预览加载失败");
     } finally {
@@ -367,8 +454,22 @@ export default function LibraryPage() {
     <div className="space-y-4 max-w-4xl">
       <p className="text-sm text-ink-700 leading-relaxed">
         <strong>检索：</strong>按标题、文件名、路径、作者、标签或集合过滤。
-        <strong className="ml-1">批量：</strong>勾选后点「批量 MinerU 索引」；单篇可在卡片底部操作。
+        <strong className="ml-1">质量：</strong>索引后可看解析质量分；可筛低质量（&lt;
+        {Math.round(LOW_QUALITY_THRESHOLD * 100)}%）或未评分文献。
+        <strong className="ml-1">批量：</strong>勾选后点「批量 MinerU 索引」。
       </p>
+      {qualitySummary && !loading && (
+        <div className="flex flex-wrap gap-2 text-xs text-ink-700">
+          <span className="rounded-md bg-mist-100 px-2 py-1">全库 {qualitySummary.total} 篇</span>
+          <span className="rounded-md bg-red-50 px-2 py-1 text-red-900">
+            低质量 {qualitySummary.low_quality} 篇
+          </span>
+          <span className="rounded-md bg-mist-100 px-2 py-1">未评分 {qualitySummary.unscored} 篇</span>
+          <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-800">
+            高质量 {qualitySummary.high_quality} 篇
+          </span>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-ink-950">文献库</h1>
         <div className="flex flex-wrap gap-2">
@@ -407,6 +508,33 @@ export default function LibraryPage() {
             className="mt-1 w-full rounded-lg border border-mist-200 px-3 py-2 text-sm"
           />
         </label>
+        <div className="flex flex-wrap gap-3">
+          <label className="block min-w-[10rem] flex-1">
+            <span className="text-xs font-semibold uppercase text-ink-500">解析质量</span>
+            <select
+              value={qualityFilter}
+              onChange={(e) => setQualityFilter(e.target.value as QualityFilter)}
+              className="mt-1 w-full rounded-lg border border-mist-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="all">全部</option>
+              <option value="low">仅低质量（&lt; {Math.round(LOW_QUALITY_THRESHOLD * 100)}%）</option>
+              <option value="unscored">仅未评分</option>
+              <option value="high">高质量（≥ 85%）</option>
+            </select>
+          </label>
+          <label className="block min-w-[10rem] flex-1">
+            <span className="text-xs font-semibold uppercase text-ink-500">排序</span>
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              className="mt-1 w-full rounded-lg border border-mist-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="updated">最近更新</option>
+              <option value="quality_asc">质量分从低到高</option>
+              <option value="quality_desc">质量分从高到低</option>
+            </select>
+          </label>
+        </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -431,8 +559,14 @@ export default function LibraryPage() {
         <p className="text-xs text-ink-600">
           {searchQ ? (
             <>
-              搜索「{searchQ}」：显示 {items.length} / 共 {total} 篇
+              搜索「{searchQ}」：显示 {items.length} / 匹配 {total} 篇
             </>
+          ) : qualityFilter === "low" ? (
+            <>低质量文献：{total} 篇</>
+          ) : qualityFilter === "unscored" ? (
+            <>未评分解析质量：{total} 篇</>
+          ) : qualityFilter === "high" ? (
+            <>高质量文献：{total} 篇</>
           ) : (
             <>共 {total} 篇文献</>
           )}
@@ -499,6 +633,7 @@ export default function LibraryPage() {
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         <StatusBadge label="解析" value={p.parse_status} />
                         <StatusBadge label="索引" value={indexValue} hint={indexHint} />
+                        <ParseQualityBadge score={p.parse_quality_score} />
                         <button
                           type="button"
                           onClick={() => {
@@ -506,6 +641,7 @@ export default function LibraryPage() {
                               setExpandedId(null);
                               setPreviewDoc(null);
                               setPreviewChunks([]);
+                              setPreviewReport(null);
                             } else {
                               setExpandedId(p.id);
                               void loadPreview(p.id);
@@ -536,8 +672,82 @@ export default function LibraryPage() {
                           ) : null}
                           </div>
                           {previewLoading ? (
-                            <p className="text-xs text-ink-600">加载 document.md / chunks…</p>
-                          ) : previewDoc ? (
+                            <p className="text-xs text-ink-600">加载解析报告 / document.md / chunks…</p>
+                          ) : previewReport ? (
+                            <div className="rounded-lg border border-mist-200 bg-white p-3 text-xs text-ink-800">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-ink-950">解析质量报告</span>
+                                <ParseQualityBadge score={previewReport.parse_quality_score} />
+                              </div>
+                              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] sm:grid-cols-3">
+                                {previewReport.text_length != null && (
+                                  <>
+                                    <dt className="text-ink-500">正文长度</dt>
+                                    <dd>{previewReport.text_length}</dd>
+                                  </>
+                                )}
+                                {previewReport.detected_sections != null && (
+                                  <>
+                                    <dt className="text-ink-500">章节数</dt>
+                                    <dd>{previewReport.detected_sections}</dd>
+                                  </>
+                                )}
+                                {previewReport.formula_blocks != null && (
+                                  <>
+                                    <dt className="text-ink-500">公式块</dt>
+                                    <dd>{previewReport.formula_blocks}</dd>
+                                  </>
+                                )}
+                                {previewReport.table_blocks != null && (
+                                  <>
+                                    <dt className="text-ink-500">表格</dt>
+                                    <dd>{previewReport.table_blocks}</dd>
+                                  </>
+                                )}
+                                {previewReport.image_blocks != null && (
+                                  <>
+                                    <dt className="text-ink-500">图片</dt>
+                                    <dd>{previewReport.image_blocks}</dd>
+                                  </>
+                                )}
+                                {previewReport.ocr_ratio != null && (
+                                  <>
+                                    <dt className="text-ink-500">OCR 碎片比</dt>
+                                    <dd>{(previewReport.ocr_ratio * 100).toFixed(1)}%</dd>
+                                  </>
+                                )}
+                                {previewReport.suspicious_garbled_ratio != null && (
+                                  <>
+                                    <dt className="text-ink-500">乱码比</dt>
+                                    <dd>{(previewReport.suspicious_garbled_ratio * 100).toFixed(2)}%</dd>
+                                  </>
+                                )}
+                              </dl>
+                              {(previewReport.warnings?.length ?? 0) > 0 && (
+                                <ul className="mt-2 flex flex-wrap gap-1">
+                                  {previewReport.warnings!.map((w) => (
+                                    <li
+                                      key={w}
+                                      className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-900"
+                                    >
+                                      {warningLabel(w)}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                              {!previewReport.warnings?.length &&
+                                (previewReport.parse_quality_score ?? 1) < LOW_QUALITY_THRESHOLD && (
+                                  <p className="mt-2 text-[11px] text-red-800">
+                                    质量分偏低，可尝试「强制重建」或检查 PDF 是否为扫描件。
+                                  </p>
+                                )}
+                            </div>
+                          ) : p.parse_status === "parsed" || p.index_status === "indexed" ? (
+                            <p className="text-xs text-ink-600">
+                              尚无解析质量报告；请执行「建立索引」或「强制重建」（需重新解析 PDF）。「仅重建索引」不会写入质量分。
+                            </p>
+                          ) : null}
+                          {!previewLoading && previewDoc ? (
                             <div className="rounded-lg border border-mist-200 bg-mist-50 p-2">
                               <p className="text-[11px] font-medium text-ink-600">
                                 document.md
@@ -607,7 +817,15 @@ export default function LibraryPage() {
 
           {items.length === 0 && (
             <p className="px-4 py-8 text-center text-sm text-ink-600">
-              {searchQ ? `没有匹配「${searchQ}」的文献。` : "暂无文献。请先确认 Zotero 路径，然后点击「扫描磁盘」。"}
+              {searchQ
+                ? `没有匹配「${searchQ}」的文献。`
+                : qualityFilter === "low"
+                  ? `当前没有质量分低于 ${Math.round(LOW_QUALITY_THRESHOLD * 100)}% 的文献。`
+                  : qualityFilter === "unscored"
+                    ? "所有文献均已有解析质量分。"
+                    : qualityFilter === "high"
+                      ? "暂无高质量（≥85%）文献。"
+                      : "暂无文献。请先确认 Zotero 路径，然后点击「扫描磁盘」。"}
             </p>
           )}
         </div>

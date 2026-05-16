@@ -10,6 +10,9 @@ import {
   type BilingualLang,
   type BilingualStreamEvent,
   type ChatStreamEvent,
+  type ClaimRecord,
+  type RetrievalScopeBody,
+  type VerificationStatus,
 } from "@/lib/api";
 
 type Citation = {
@@ -19,7 +22,31 @@ type Citation = {
   title?: string | null;
   section_path?: string | null;
   preview?: string;
+  verification_status?: VerificationStatus | string;
 };
+
+function parseScopeList(raw: string): string[] | undefined {
+  const items = raw
+    .split(/[,，;；]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return items.length ? items : undefined;
+}
+
+function verificationLabel(status?: string): { text: string; className: string } {
+  switch (status) {
+    case "verified":
+      return { text: "已核验", className: "bg-emerald-100 text-emerald-800" };
+    case "insufficient":
+      return { text: "证据不足", className: "bg-amber-100 text-amber-900" };
+    case "invalid_ref":
+      return { text: "无效引用", className: "bg-red-100 text-red-800" };
+    case "unreferenced":
+      return { text: "未标注引用", className: "bg-mist-200 text-ink-700" };
+    default:
+      return { text: "未使用", className: "bg-mist-100 text-ink-600" };
+  }
+}
 
 type RecentItem = {
   question: string;
@@ -82,6 +109,11 @@ export default function ChatPage() {
   const [translateTarget, setTranslateTarget] = useState<BilingualLang>("en");
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [hint, setHint] = useState<string | null>(null);
+  const [tagsFilter, setTagsFilter] = useState("");
+  const [collectionsFilter, setCollectionsFilter] = useState("");
+  const [yearsMin, setYearsMin] = useState("");
+  const [yearsMax, setYearsMax] = useState("");
+  const [claims, setClaims] = useState<ClaimRecord[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const translateAbortRef = useRef<AbortController | null>(null);
 
@@ -216,14 +248,24 @@ export default function ChatPage() {
     setAnswer("");
     setAnswerOther(null);
     setCitations([]);
+    setClaims([]);
+
+    const scope: RetrievalScopeBody = {
+      tags: parseScopeList(tagsFilter),
+      collections: parseScopeList(collectionsFilter),
+      years_min: yearsMin ? Number(yearsMin) : undefined,
+      years_max: yearsMax ? Number(yearsMax) : undefined,
+    };
 
     try {
       if (useStream) {
         await chatStream(
-          { question: q, lang },
+          { question: q, lang, ...scope },
           (ev: ChatStreamEvent) => {
             if (ev.type === "citations") {
               setCitations((ev.citations ?? []) as Citation[]);
+            } else if (ev.type === "claims") {
+              setClaims(ev.claims ?? []);
             } else if (ev.type === "token") {
               setAnswer((prev) => prev + (ev.t ?? ""));
             } else if (
@@ -247,9 +289,11 @@ export default function ChatPage() {
         }>("/chat", {
           question: q,
           lang,
+          ...scope,
         });
         setAnswer(res.answer);
         setCitations(res.citations ?? []);
+        setClaims((res as { claims?: ClaimRecord[] }).claims ?? []);
         if (res.answer_other?.trim() && res.answer_other_lang) {
           setAnswerOther({ lang: res.answer_other_lang, text: res.answer_other });
           setTranslateTarget(res.answer_other_lang);
@@ -329,6 +373,37 @@ export default function ChatPage() {
           </div>
         </div>
       )}
+      <div className="grid gap-2 rounded-xl border border-mist-200 bg-mist-50 p-3 text-sm">
+        <span className="text-xs font-semibold uppercase tracking-wide text-ink-500">检索范围（可选）</span>
+        <input
+          className="w-full rounded-md border border-mist-200 bg-white px-2 py-1.5 text-sm"
+          placeholder="Zotero 标签，逗号分隔，例如：几何, PDE"
+          value={tagsFilter}
+          onChange={(e) => setTagsFilter(e.target.value)}
+        />
+        <input
+          className="w-full rounded-md border border-mist-200 bg-white px-2 py-1.5 text-sm"
+          placeholder="Zotero 集合名，逗号分隔"
+          value={collectionsFilter}
+          onChange={(e) => setCollectionsFilter(e.target.value)}
+        />
+        <div className="flex flex-wrap gap-2">
+          <input
+            className="w-28 rounded-md border border-mist-200 bg-white px-2 py-1.5 text-sm"
+            placeholder="年份 ≥"
+            value={yearsMin}
+            onChange={(e) => setYearsMin(e.target.value)}
+            inputMode="numeric"
+          />
+          <input
+            className="w-28 rounded-md border border-mist-200 bg-white px-2 py-1.5 text-sm"
+            placeholder="年份 ≤"
+            value={yearsMax}
+            onChange={(e) => setYearsMax(e.target.value)}
+            inputMode="numeric"
+          />
+        </div>
+      </div>
       <textarea
         className="min-h-[120px] w-full rounded-xl border border-mist-200 bg-white p-3 text-sm shadow-inner outline-none focus:border-accent"
         placeholder="例如：总结与 Yang-Mills 能量恒等式相关的主要结论。"
@@ -403,15 +478,48 @@ export default function ChatPage() {
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-ink-950">引用来源</h2>
           <div className="grid gap-2">
-            {citations.map((c) => (
-              <div key={c.chunk_id} className="rounded-lg border border-mist-200 bg-white p-3 text-xs text-ink-800">
-                <div className="font-semibold text-ink-950">
-                  [{c.ref}] {c.title || c.paper_id}
+            {citations.map((c) => {
+              const badge = verificationLabel(c.verification_status);
+              return (
+                <div key={c.chunk_id} className="rounded-lg border border-mist-200 bg-white p-3 text-xs text-ink-800">
+                  <div className="flex flex-wrap items-center gap-2 font-semibold text-ink-950">
+                    <span>
+                      [{c.ref}] {c.title || c.paper_id}
+                    </span>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${badge.className}`}>
+                      {badge.text}
+                    </span>
+                  </div>
+                  {c.section_path && <div className="text-ink-500">{c.section_path}</div>}
+                  <div className="text-ink-500">chunk: {c.chunk_id}</div>
+                  {c.preview && <div className="mt-2 text-ink-700">{c.preview}</div>}
                 </div>
-                <div className="text-ink-500">chunk: {c.chunk_id}</div>
-                {c.preview && <div className="mt-2 text-ink-700">{c.preview}</div>}
-              </div>
-            ))}
+              );
+            })}
+          </div>
+        </section>
+      )}
+      {claims.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-ink-950">论断核验</h2>
+          <div className="grid gap-2">
+            {claims.map((cl, i) => {
+              const badge = verificationLabel(cl.status);
+              return (
+                <div
+                  key={`${i}-${cl.claim_text.slice(0, 24)}`}
+                  className="rounded-lg border border-mist-200 bg-mist-50 p-3 text-xs"
+                >
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${badge.className}`}>
+                      {badge.text}
+                    </span>
+                    {cl.ref_num != null && <span className="text-ink-500">→ [{cl.ref_num}]</span>}
+                  </div>
+                  <p className="text-ink-800">{cl.claim_text}</p>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
