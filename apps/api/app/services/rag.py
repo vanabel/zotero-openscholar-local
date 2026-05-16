@@ -14,10 +14,16 @@ from app.services.review_cache import (
     put_cached_review,
     stream_events_from_payload as stream_review_events_from_payload,
 )
-from app.services.citation_verifier import no_evidence_answer, verify_citations
+from app.services.citation_verifier import (
+    enrich_citations_payload,
+    no_evidence_answer,
+    verify_citations,
+)
 from app.services.llm import LLMClient, build_citation_prompt, try_embed_one
+from app.services.retrieval_scope import RetrievalScope, scope_from_request
 from app.services.retriever import retrieve_for_query, retrieve_limits
 from app.services.review_templates import ReviewTemplate, build_review_messages, review_to_markdown
+from app.services.summaries import retrieve_summaries_for_query, summaries_to_pseudo_contexts
 from app.services.translation import (
     expand_query_for_retrieval,
     stream_translate_sse_events,
@@ -35,10 +41,49 @@ def _citations_payload(contexts: list[dict]) -> list[dict]:
             "paper_id": c["paper_id"],
             "title": c.get("title"),
             "section_path": c.get("section_path"),
+            "chunk_type": c.get("chunk_type"),
             "preview": (c["text"][:280] + "…") if len(c["text"]) > 280 else c["text"],
         }
         for i, c in enumerate(contexts)
     ]
+
+
+async def _retrieve_contexts(
+    question: str,
+    *,
+    scope: RetrievalScope | None,
+    use_summaries: bool = False,
+    include_references: bool = False,
+) -> list[dict]:
+    qvec = await try_embed_one(question)
+    extra_q = await _extra_retrieval_queries(question)
+    k_fts, k_final = retrieve_limits()
+    summary_ctx: list[dict] = []
+    if use_summaries:
+        sums = retrieve_summaries_for_query(question, limit=max(3, k_final // 2), scope=scope)
+        summary_ctx = summaries_to_pseudo_contexts(sums)
+        if summary_ctx:
+            plog_info("rag", "summaries 命中=%s", len(summary_ctx))
+    chunk_k = k_final if not summary_ctx else max(k_final, k_final + len(summary_ctx))
+    chunks = await retrieve_for_query(
+        question,
+        top_k_fts=k_fts,
+        top_k_final=chunk_k,
+        query_vec=qvec,
+        extra_queries=extra_q,
+        scope=scope,
+        include_references=include_references,
+    )
+    if summary_ctx:
+        # summaries 编号在前，chunks 续编
+        n = len(summary_ctx)
+        renumbered: list[dict] = []
+        for i, c in enumerate(chunks, start=n + 1):
+            row = dict(c)
+            row["_orig_ref"] = i
+            renumbered.append(row)
+        return summary_ctx + renumbered[:k_final]
+    return chunks[:k_final]
 
 
 async def _extra_retrieval_queries(question: str) -> list[str] | None:
@@ -52,22 +97,51 @@ async def _extra_retrieval_queries(question: str) -> list[str] | None:
     return extra or None
 
 
-async def answer_with_citations(question: str, lang: str = "zh", *, use_cache: bool = True) -> dict:
+def _build_scope(
+    *,
+    paper_ids: list[str] | None,
+    tags: list[str] | None,
+    collections: list[str] | None,
+    years_min: int | None,
+    years_max: int | None,
+    include_references: bool,
+) -> RetrievalScope | None:
+    return scope_from_request(
+        paper_ids=paper_ids,
+        tags=tags,
+        collections=collections,
+        years_min=years_min,
+        years_max=years_max,
+        include_references=include_references,
+    )
+
+
+async def answer_with_citations(
+    question: str,
+    lang: str = "zh",
+    *,
+    use_cache: bool = True,
+    paper_ids: list[str] | None = None,
+    tags: list[str] | None = None,
+    collections: list[str] | None = None,
+    years_min: int | None = None,
+    years_max: int | None = None,
+) -> dict:
     if use_cache:
         hit = get_cached_answer(question, lang)
         if hit is not None:
             return hit
     t0 = time.monotonic()
     plog_info("rag", "answer 开始 lang=%s 问题预览=%s", lang, clip(question, 160))
-    qvec = await try_embed_one(question)
-    plog_info("rag", "query 嵌入: %s", "有" if qvec else "无")
-    extra_q = await _extra_retrieval_queries(question)
-    if extra_q:
-        plog_info("rag", "双语检索扩展 queries=%s", len(extra_q) + 1)
-    k_fts, k_final = retrieve_limits()
-    contexts = await retrieve_for_query(
-        question, top_k_fts=k_fts, top_k_final=k_final, query_vec=qvec, extra_queries=extra_q
+    scope = _build_scope(
+        paper_ids=paper_ids,
+        tags=tags,
+        collections=collections,
+        years_min=years_min,
+        years_max=years_max,
+        include_references=False,
     )
+    contexts = await _retrieve_contexts(question, scope=scope)
     plog_info("rag", "retrieve 完成 候选片段=%s 耗时=%.2fs", len(contexts), time.monotonic() - t0)
     if not contexts:
         plog_info("rag", "answer 中止：无检索片段")
@@ -75,6 +149,7 @@ async def answer_with_citations(question: str, lang: str = "zh", *, use_cache: b
             "answer": no_evidence_answer(lang),
             "citations": [],
             "citation_check": {"ok": False, "reason": "no_contexts"},
+            "claims": [],
         }
 
     for i, c in enumerate(contexts[:8], start=1):
@@ -85,8 +160,8 @@ async def answer_with_citations(question: str, lang: str = "zh", *, use_cache: b
     t1 = time.monotonic()
     answer = await llm.chat(messages, temperature=0.2)
     plog_info("rag", "answer LLM 完成 耗时=%.2fs", time.monotonic() - t1)
-    answer, citation_check = verify_citations(answer, contexts, lang=lang)
-    citations = _citations_payload(contexts)
+    answer, citation_check = verify_citations(answer, contexts, lang=lang, persist=True, source_type="chat")
+    citations = enrich_citations_payload(_citations_payload(contexts), citation_check)
     answer_other: str | None = None
     answer_other_lang: str | None = None
     if translation_for_answer_enabled():
@@ -101,6 +176,8 @@ async def answer_with_citations(question: str, lang: str = "zh", *, use_cache: b
         "citations": citations,
         "contexts_used": len(contexts),
         "citation_check": citation_check,
+        "claims": citation_check.get("claims") or [],
+        "answer_id": citation_check.get("answer_id"),
     }
     if answer_other:
         out["answer_other"] = answer_other
@@ -111,7 +188,15 @@ async def answer_with_citations(question: str, lang: str = "zh", *, use_cache: b
 
 
 async def answer_with_citations_stream(
-    question: str, lang: str = "zh", *, use_cache: bool = True
+    question: str,
+    lang: str = "zh",
+    *,
+    use_cache: bool = True,
+    paper_ids: list[str] | None = None,
+    tags: list[str] | None = None,
+    collections: list[str] | None = None,
+    years_min: int | None = None,
+    years_max: int | None = None,
 ) -> AsyncIterator[dict]:
     """先推送 citations，再逐段 token，最后 done。"""
     if use_cache:
@@ -122,14 +207,15 @@ async def answer_with_citations_stream(
             return
     t0 = time.monotonic()
     plog_info("rag", "answer_stream 开始 lang=%s 问题预览=%s", lang, clip(question, 160))
-    qvec = await try_embed_one(question)
-    extra_q = await _extra_retrieval_queries(question)
-    if extra_q:
-        plog_info("rag", "answer_stream 双语检索扩展 queries=%s", len(extra_q) + 1)
-    k_fts, k_final = retrieve_limits()
-    contexts = await retrieve_for_query(
-        question, top_k_fts=k_fts, top_k_final=k_final, query_vec=qvec, extra_queries=extra_q
+    scope = _build_scope(
+        paper_ids=paper_ids,
+        tags=tags,
+        collections=collections,
+        years_min=years_min,
+        years_max=years_max,
+        include_references=False,
     )
+    contexts = await _retrieve_contexts(question, scope=scope)
     plog_info("rag", "answer_stream retrieve 完成 片段=%s 耗时=%.2fs", len(contexts), time.monotonic() - t0)
     if not contexts:
         plog_info("rag", "answer_stream 中止：无检索片段")
@@ -140,9 +226,10 @@ async def answer_with_citations_stream(
         }
         return
 
+    citations = enrich_citations_payload(_citations_payload(contexts), {"citation_status": []})
     yield {
         "type": "citations",
-        "citations": _citations_payload(contexts),
+        "citations": citations,
         "contexts_used": len(contexts),
     }
     llm = LLMClient()
@@ -154,8 +241,11 @@ async def answer_with_citations_stream(
         yield {"type": "token", "t": piece}
     plog_info("rag", "answer_stream LLM 流结束 耗时=%.2fs", time.monotonic() - t1)
     full = "".join(buf)
-    full, citation_check = verify_citations(full, contexts, lang=lang)
+    full, citation_check = verify_citations(full, contexts, lang=lang, persist=True, source_type="chat")
+    citations = enrich_citations_payload(_citations_payload(contexts), citation_check)
+    yield {"type": "citations", "citations": citations, "contexts_used": len(contexts)}
     yield {"type": "citation_check", "citation_check": citation_check}
+    yield {"type": "claims", "claims": citation_check.get("claims") or []}
     answer_other: str | None = None
     answer_other_lang: str | None = None
     if translation_for_answer_enabled() and full.strip():
@@ -172,9 +262,11 @@ async def answer_with_citations_stream(
     if use_cache:
         cached: dict = {
             "answer": full,
-            "citations": _citations_payload(contexts),
+            "citations": citations,
             "contexts_used": len(contexts),
             "citation_check": citation_check,
+            "claims": citation_check.get("claims") or [],
+            "answer_id": citation_check.get("answer_id"),
         }
         if answer_other and answer_other_lang:
             cached["answer_other"] = answer_other
@@ -193,6 +285,11 @@ async def write_literature_review(
     *,
     use_cache: bool = True,
     template: ReviewTemplate = "literature_review",
+    paper_ids: list[str] | None = None,
+    tags: list[str] | None = None,
+    collections: list[str] | None = None,
+    years_min: int | None = None,
+    years_max: int | None = None,
 ) -> dict:
     if use_cache:
         hit = get_cached_review(topic, focus, lang, template=template)
@@ -201,18 +298,22 @@ async def write_literature_review(
     q = _review_query(topic, focus)
     t0 = time.monotonic()
     plog_info("review", "review 开始 lang=%s 主题=%s", lang, clip(q, 200))
-    qvec = await try_embed_one(q)
-    extra_q = await _extra_retrieval_queries(q)
-    k_fts, k_final = retrieve_limits()
-    contexts = await retrieve_for_query(
-        q, top_k_fts=k_fts, top_k_final=k_final, query_vec=qvec, extra_queries=extra_q
+    scope = _build_scope(
+        paper_ids=paper_ids,
+        tags=tags,
+        collections=collections,
+        years_min=years_min,
+        years_max=years_max,
+        include_references=True,
     )
+    contexts = await _retrieve_contexts(q, scope=scope, use_summaries=True, include_references=True)
     plog_info("review", "retrieve 完成 片段=%s 耗时=%.2fs", len(contexts), time.monotonic() - t0)
     if not contexts:
         return {
             "review": no_evidence_answer(lang),
             "citations": [],
             "citation_check": {"ok": False, "reason": "no_contexts"},
+            "claims": [],
         }
 
     llm = LLMClient()
@@ -220,14 +321,16 @@ async def write_literature_review(
     t1 = time.monotonic()
     review = await llm.chat(messages, temperature=0.35)
     plog_info("review", "review LLM 完成 耗时=%.2fs 输出字符=%s", time.monotonic() - t1, len(review or ""))
-    review, citation_check = verify_citations(review, contexts, lang=lang)
-    citations = _citations_payload(contexts)
+    review, citation_check = verify_citations(review, contexts, lang=lang, persist=True, source_type="review")
+    citations = enrich_citations_payload(_citations_payload(contexts), citation_check)
     out = {
         "review": review,
         "citations": citations,
         "contexts_used": len(contexts),
         "citation_check": citation_check,
         "template": template,
+        "claims": citation_check.get("claims") or [],
+        "answer_id": citation_check.get("answer_id"),
     }
     if use_cache:
         put_cached_review(topic, focus, lang, out, template=template)
@@ -241,6 +344,11 @@ async def write_literature_review_stream(
     *,
     use_cache: bool = True,
     template: ReviewTemplate = "literature_review",
+    paper_ids: list[str] | None = None,
+    tags: list[str] | None = None,
+    collections: list[str] | None = None,
+    years_min: int | None = None,
+    years_max: int | None = None,
 ) -> AsyncIterator[dict]:
     if use_cache:
         hit = get_cached_review(topic, focus, lang, template=template)
@@ -251,12 +359,15 @@ async def write_literature_review_stream(
     q = _review_query(topic, focus)
     t0 = time.monotonic()
     plog_info("review", "review_stream 开始 lang=%s 主题=%s", lang, clip(q, 200))
-    qvec = await try_embed_one(q)
-    extra_q = await _extra_retrieval_queries(q)
-    k_fts, k_final = retrieve_limits()
-    contexts = await retrieve_for_query(
-        q, top_k_fts=k_fts, top_k_final=k_final, query_vec=qvec, extra_queries=extra_q
+    scope = _build_scope(
+        paper_ids=paper_ids,
+        tags=tags,
+        collections=collections,
+        years_min=years_min,
+        years_max=years_max,
+        include_references=True,
     )
+    contexts = await _retrieve_contexts(q, scope=scope, use_summaries=True, include_references=True)
     plog_info("review", "review_stream retrieve 完成 片段=%s 耗时=%.2fs", len(contexts), time.monotonic() - t0)
     if not contexts:
         yield {
@@ -280,8 +391,11 @@ async def write_literature_review_stream(
         yield {"type": "token", "t": piece}
     plog_info("review", "review_stream LLM 结束 耗时=%.2fs", time.monotonic() - t1)
     full = "".join(buf)
-    full, citation_check = verify_citations(full, contexts, lang=lang)
+    full, citation_check = verify_citations(full, contexts, lang=lang, persist=True, source_type="review")
+    citations = enrich_citations_payload(_citations_payload(contexts), citation_check)
     yield {"type": "citation_check", "citation_check": citation_check}
+    yield {"type": "claims", "claims": citation_check.get("claims") or []}
+    yield {"type": "citations", "citations": citations, "contexts_used": len(contexts)}
     yield {"type": "done"}
     if use_cache and full.strip():
         put_cached_review(
@@ -290,10 +404,12 @@ async def write_literature_review_stream(
             lang,
             {
                 "review": full,
-                "citations": _citations_payload(contexts),
+                "citations": citations,
                 "contexts_used": len(contexts),
                 "citation_check": citation_check,
                 "template": template,
+                "claims": citation_check.get("claims") or [],
+                "answer_id": citation_check.get("answer_id"),
             },
             template=template,
         )
@@ -306,6 +422,11 @@ async def export_review_markdown(
     *,
     template: ReviewTemplate = "literature_review",
     use_cache: bool = True,
+    paper_ids: list[str] | None = None,
+    tags: list[str] | None = None,
+    collections: list[str] | None = None,
+    years_min: int | None = None,
+    years_max: int | None = None,
 ) -> str:
     data = await write_literature_review(
         topic,
@@ -313,8 +434,49 @@ async def export_review_markdown(
         lang=lang,
         use_cache=use_cache,
         template=template,
+        paper_ids=paper_ids,
+        tags=tags,
+        collections=collections,
+        years_min=years_min,
+        years_max=years_max,
     )
     return review_to_markdown(
+        data.get("review") or "",
+        topic,
+        data.get("citations") or [],
+        template=template,
+        lang=lang,
+    )
+
+
+async def export_review_docx(
+    topic: str,
+    focus: str | None = None,
+    lang: str = "zh",
+    *,
+    template: ReviewTemplate = "literature_review",
+    use_cache: bool = True,
+    paper_ids: list[str] | None = None,
+    tags: list[str] | None = None,
+    collections: list[str] | None = None,
+    years_min: int | None = None,
+    years_max: int | None = None,
+) -> bytes:
+    from app.services.export_docx import review_to_docx_bytes
+
+    data = await write_literature_review(
+        topic,
+        focus=focus,
+        lang=lang,
+        use_cache=use_cache,
+        template=template,
+        paper_ids=paper_ids,
+        tags=tags,
+        collections=collections,
+        years_min=years_min,
+        years_max=years_max,
+    )
+    return review_to_docx_bytes(
         data.get("review") or "",
         topic,
         data.get("citations") or [],

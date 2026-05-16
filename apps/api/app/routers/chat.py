@@ -20,6 +20,11 @@ class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=8000)
     lang: str = "zh"
     use_cache: bool = True
+    paper_ids: list[str] | None = Field(None, max_length=50)
+    tags: list[str] | None = Field(None, max_length=30, description="Zotero 标签，命中任一即纳入")
+    collections: list[str] | None = Field(None, max_length=30, description="Zotero 集合名，命中任一即纳入")
+    years_min: int | None = Field(None, ge=1900, le=2100)
+    years_max: int | None = Field(None, ge=1900, le=2100)
 
 
 class TranslateRequest(BaseModel):
@@ -69,7 +74,16 @@ def chat_cache_lookup(
 
 @router.post("")
 async def chat(req: ChatRequest):
-    return await answer_with_citations(req.question, lang=req.lang, use_cache=req.use_cache)
+    return await answer_with_citations(
+        req.question,
+        lang=req.lang,
+        use_cache=req.use_cache,
+        paper_ids=req.paper_ids,
+        tags=req.tags,
+        collections=req.collections,
+        years_min=req.years_min,
+        years_max=req.years_max,
+    )
 
 
 @router.post("/translate")
@@ -111,7 +125,16 @@ async def chat_stream(req: ChatRequest):
     """Server-Sent Events：citations | token | bilingual_* | done | error。"""
 
     async def gen():
-        async for ev in answer_with_citations_stream(req.question, lang=req.lang, use_cache=req.use_cache):
+        async for ev in answer_with_citations_stream(
+            req.question,
+            lang=req.lang,
+            use_cache=req.use_cache,
+            paper_ids=req.paper_ids,
+            tags=req.tags,
+            collections=req.collections,
+            years_min=req.years_min,
+            years_max=req.years_max,
+        ):
             yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
