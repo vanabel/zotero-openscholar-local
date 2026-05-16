@@ -24,8 +24,14 @@ def review_to_docx_bytes(
     doc = Document()
     title = topic.strip() or ("Literature Review" if lang == "en" else "文献综述")
     doc.add_heading(title, level=0)
-    if template == "grant_proposal":
-        doc.add_paragraph("模板：项目申请书（研究现状）" if lang == "zh" else "Template: Grant proposal")
+    template_labels = {
+        "grant_proposal": ("模板：项目申请书（研究现状）", "Template: Grant proposal"),
+        "quick_review": ("模板：文献速览", "Template: Quick review"),
+        "comparative_review": ("模板：对比综述", "Template: Comparative review"),
+    }
+    if template in template_labels:
+        zh_l, en_l = template_labels[template]
+        doc.add_paragraph(zh_l if lang == "zh" else en_l)
 
     for para in re.split(r"\n{2,}", review.strip()):
         p = para.strip()

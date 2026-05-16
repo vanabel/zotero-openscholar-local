@@ -41,6 +41,7 @@ def _citations_payload(contexts: list[dict]) -> list[dict]:
             "paper_id": c["paper_id"],
             "title": c.get("title"),
             "section_path": c.get("section_path"),
+            "page_start": c.get("page_start"),
             "chunk_type": c.get("chunk_type"),
             "preview": (c["text"][:280] + "…") if len(c["text"]) > 280 else c["text"],
         }

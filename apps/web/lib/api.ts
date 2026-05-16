@@ -140,7 +140,11 @@ export async function chatStream(
   await consumeSse<ChatStreamEvent>(res, onEvent);
 }
 
-export type ReviewTemplate = "literature_review" | "grant_proposal";
+export type ReviewTemplate =
+  | "literature_review"
+  | "grant_proposal"
+  | "quick_review"
+  | "comparative_review";
 
 export type ReviewStreamEvent =
   | { type: "citations"; citations: unknown[]; contexts_used?: number }

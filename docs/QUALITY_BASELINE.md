@@ -38,10 +38,10 @@ cd apps/api && .venv/bin/pytest tests/test_p0_regression.py -q
 }
 ```
 
-运行（待实现 CLI）：
+运行：
 
 ```bash
-cd apps/api && .venv/bin/python -m scripts.eval_retrieval --top-k 10
+cd apps/api && .venv/bin/python scripts/eval_retrieval.py --top-k 10
 ```
 
 ## 引用评测（P4）

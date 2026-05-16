@@ -9,6 +9,7 @@ from pathlib import Path
 from app.config import settings
 from app.db import get_db
 from app.pipeline_logging import plog_info
+from app.services.clean_markdown import clean_markdown
 from app.services.chunk_quality import (
     classify_chunk_type,
     content_hash,
@@ -205,7 +206,10 @@ async def index_paper(
         )
         if progress:
             progress.update("parse", 1, 1, "解析完成")
+        md = clean_markdown(md)
+        (out_dir / "document.md").write_text(md, encoding="utf-8")
         meta["pdf_sha256"] = pdf_sha
+        meta["markdown_cleaned"] = True
         (out_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         report = analyze_markdown(md, parser=str(meta.get("mode") or "mineru"), parser_mode=meta.get("parser_mode"))
         prev = None if force else latest_parse_report(paper_id)

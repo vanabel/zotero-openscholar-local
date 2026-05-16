@@ -188,6 +188,108 @@ def enqueue_index_batch(
     return [enqueue_index_task(pid, force=force, reindex_only=reindex_only) for pid in paper_ids]
 
 
+def _find_active_summarize_task(paper_id: str) -> str | None:
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT id FROM tasks
+            WHERE paper_id = ? AND task_type = 'summarize' AND status IN ('queued', 'running')
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (paper_id,),
+        ).fetchone()
+    return row["id"] if row else None
+
+
+def enqueue_summarize_task(paper_id: str, *, lang: str = "zh") -> dict:
+    paper = get_paper(paper_id)
+    if not paper or paper.get("deleted"):
+        return {"ok": False, "error": "文献不存在或已归档"}
+    if (paper.get("index_status") or "") != "indexed":
+        return {"ok": False, "error": "文献尚未 indexed，无法生成摘要"}
+    existing = _find_active_summarize_task(paper_id)
+    if existing:
+        t = get_task(existing)
+        return {"task_id": existing, "status": t["status"] if t else "queued", "deduped": True}
+
+    task_id = uuid.uuid4().hex
+    now = _utc_now()
+    payload = {"lang": lang}
+    progress = {"phase": "queued", "done": 0, "total": 1, "message": "排队中"}
+    with get_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO tasks(
+              id, task_type, paper_id, status, error,
+              payload_json, progress_json, result_json,
+              created_at, updated_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                task_id,
+                "summarize",
+                paper_id,
+                "queued",
+                None,
+                json_dumps_safe(payload),
+                json_dumps_safe(progress),
+                None,
+                now,
+                now,
+            ),
+        )
+    _queue.put_nowait(task_id)
+    plog_info("task", "入队 summarize task_id=%s paper_id=%s", task_id, paper_id)
+    return {"task_id": task_id, "status": "queued", "deduped": False}
+
+
+def enqueue_summarize_batch(paper_ids: list[str], *, lang: str = "zh") -> list[dict]:
+    return [enqueue_summarize_task(pid, lang=lang) for pid in paper_ids]
+
+
+async def _run_summarize_task(task_id: str) -> None:
+    from app.services.paper_summary import generate_paper_summary
+
+    row = _task_row(task_id)
+    if not row or row["task_type"] != "summarize":
+        return
+    paper_id = row.get("paper_id") or ""
+    payload = _parse_json_field(row.get("payload_json")) or {}
+    lang = str(payload.get("lang") or "zh")
+    progress = TaskProgress(task_id)
+    now = _utc_now()
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE tasks SET status = 'running', updated_at = ? WHERE id = ?",
+            (now, task_id),
+        )
+    progress.update("summarize", 0, 1, "生成摘要中…")
+    try:
+        result = await generate_paper_summary(paper_id, lang=lang)
+        if result.get("ok"):
+            with get_db() as conn:
+                conn.execute(
+                    """
+                    UPDATE tasks SET status = 'completed', result_json = ?, error = NULL,
+                      progress_json = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        json_dumps_safe(result),
+                        json_dumps_safe({"phase": "done", "done": 1, "total": 1, "message": "完成"}),
+                        _utc_now(),
+                        task_id,
+                    ),
+                )
+            plog_info("task", "完成 summarize task_id=%s paper_id=%s", task_id, paper_id)
+        else:
+            err = result.get("error") or "摘要失败"
+            _fail_task(task_id, paper_id, err, result, touch_index_status=False)
+    except Exception as e:
+        plog_info("task", "异常 summarize task_id=%s: %s", task_id, e)
+        _fail_task(task_id, paper_id, str(e), None, touch_index_status=False)
+
+
 async def _run_index_task(task_id: str) -> None:
     from app.services.indexing import index_paper
 
@@ -237,7 +339,14 @@ async def _run_index_task(task_id: str) -> None:
         _fail_task(task_id, paper_id, str(e), None)
 
 
-def _fail_task(task_id: str, paper_id: str, error: str, result: dict | None) -> None:
+def _fail_task(
+    task_id: str,
+    paper_id: str,
+    error: str,
+    result: dict | None,
+    *,
+    touch_index_status: bool = True,
+) -> None:
     from app.services.paper_status import set_paper_status
 
     now = _utc_now()
@@ -249,14 +358,19 @@ def _fail_task(task_id: str, paper_id: str, error: str, result: dict | None) -> 
             """,
             (error, json_dumps_safe(result) if result else None, now, task_id),
         )
-    set_paper_status(paper_id, index_status="failed", status_message=error[:2000])
+    if touch_index_status:
+        set_paper_status(paper_id, index_status="failed", status_message=error[:2000])
 
 
 async def _worker_loop() -> None:
     while True:
         task_id = await _queue.get()
         try:
-            await _run_index_task(task_id)
+            row = _task_row(task_id)
+            if row and row.get("task_type") == "summarize":
+                await _run_summarize_task(task_id)
+            else:
+                await _run_index_task(task_id)
         finally:
             _queue.task_done()
 

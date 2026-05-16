@@ -66,7 +66,7 @@
 |------|------|
 | `parse_reports` 表 + `parse_quality_score` | `[x]` `parse_quality.py` + `papers.parse_quality_score` |
 | 统计：页数、章节、公式/表/图、OCR 比例、乱码比例 | `[x]` 写入 `parse_reports` |
-| Markdown 清洗（页眉页脚、断行、参考文献区） | `[ ]` |
+| Markdown 清洗（页眉页脚、断行、参考文献区） | `[x]` `clean_markdown.py`；解析后写入 `document.md` |
 | 前端：section tree、质量分、警告、低质量筛选 | `[x]` 文献库质量徽章、`/papers/quality-summary`、低质量/未评分筛选 |
 | 低分重试（cloud / OCR） | `[ ]` |
 
@@ -117,9 +117,9 @@
 | 最多文献数 `RETRIEVE_MAX_PAPERS` | `[x]` |
 | Chunk 内容去重（检索结果级） | `[x]` `dedupe_chunks_by_text`（`retriever.py`） |
 | 查询扩展 / 专名同义词 | `[~]` 双语 Hy-MT 扩展已有 |
-| `eval_queries.jsonl` + 评测脚本 | `[ ]` |
+| `eval_queries.jsonl` + 评测脚本 | `[x]` `tests/eval/eval_queries.jsonl`；`scripts/eval_retrieval.py` |
 | LanceDB 替代 SQLite 全表 dense 扫描 | `[ ]` |
-| `POST /papers/index-missing` | `[ ]` |
+| `POST /papers/index-missing` | `[x]` 另含 `parse-missing`、`summarize-missing` |
 
 **验收**：top-k 不被单篇垄断；评测集可回归。
 
@@ -147,9 +147,9 @@
 
 | 模板 | 状态 |
 |------|------|
-| A. 快速综述 | `[ ]` |
-| B. 结构化综述（研究现状） | `[~]` 当前单一综述 prompt |
-| C. 对比综述（表格） | `[ ]` |
+| A. 快速综述 | `[x]` `template=quick_review` |
+| B. 结构化综述（研究现状） | `[x]` `template=literature_review` |
+| C. 对比综述（表格） | `[x]` `template=comparative_review`（Markdown 表） |
 | D. 项目申请书（现状 / 科学问题 / 切入点 / 创新性） | `[x]` `template=grant_proposal` |
 | `summaries` 表参与综述（先 summary 再 chunk） | `[x]` `summaries.py` 综述检索优先 |
 | 按标签 / 集合 / 年份限定文献范围 | `[x]` `RetrievalScope` + 问答/综述请求体 |
@@ -171,7 +171,7 @@
 | 服务重启恢复未完成任务 | `[x]` 启动时 `queued`/`running` 重新入队 |
 | 同步索引（脚本 / 调试） | `[x]` `?wait=true` 或 CLI `reindex_library.py` 直调 `index_paper` |
 | 进度 SSE / WebSocket | `[ ]` 当前为 HTTP 轮询 |
-| `parse-missing` / `index-missing` / `summarize-missing` | `[ ]` |
+| `parse-missing` / `index-missing` / `summarize-missing` | `[x]` `POST /papers/*-missing`；摘要任务 `task_type=summarize` |
 | MinerU / 嵌入并发限制（M4 24G） | `[ ]` Worker 串行 1；OpenScholar 与 Ollama embed 仍顺序执行 |
 | 独立 Worker 进程 / API 与慢任务分离 | `[ ]` |
 

@@ -290,6 +290,8 @@ export default function ReviewPage() {
             className="rounded-md border border-mist-200 bg-white px-2 py-1 text-sm"
           >
             <option value="literature_review">结构化综述</option>
+            <option value="quick_review">快速综述（速览）</option>
+            <option value="comparative_review">对比综述（含表格）</option>
             <option value="grant_proposal">项目申请书 · 研究现状</option>
           </select>
         </label>

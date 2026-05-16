@@ -16,6 +16,16 @@ class BatchIndexBody(BaseModel):
     reindex_only: bool = False
 
 
+class MissingBatchQuery(BaseModel):
+    limit: int | None = Field(None, ge=1, le=BATCH_INDEX_MAX_IDS)
+    force: bool = False
+    reindex_only: bool = False
+    include_indexing: bool = Field(
+        False, description="index-missing：是否包含 index_status=indexing 的文献"
+    )
+    lang: str = Field(default="zh", pattern="^(zh|en)$")
+
+
 @router.post("/sync-zotero-metadata")
 def sync_zotero_metadata(
     include_deleted: bool = Query(False, description="是否包含已标记 deleted 的文献"),
@@ -107,6 +117,47 @@ async def index_batch(
             "tasks": tasks,
         },
     )
+
+
+@router.post("/index-missing")
+async def index_missing(body: MissingBatchQuery = MissingBatchQuery()):
+    """为 index_status 非 indexed 的文献批量入队索引。"""
+    from app.services.paper_batch import batch_enqueue_response, list_index_missing_ids
+    from app.services.task_queue import enqueue_index_batch
+
+    ids = list_index_missing_ids(limit=body.limit, include_indexing=body.include_indexing)
+    if not ids:
+        return JSONResponse(status_code=200, content={"ok": True, "matched": 0, "queued": 0, "failed": 0})
+    tasks = enqueue_index_batch(
+        ids, force=body.force, reindex_only=body.reindex_only
+    )
+    return JSONResponse(status_code=202, content=batch_enqueue_response(tasks, matched=len(ids)))
+
+
+@router.post("/parse-missing")
+async def parse_missing(body: MissingBatchQuery = MissingBatchQuery()):
+    """为尚无 document.md 的文献批量入队索引（将触发 MinerU / pypdf 解析）。"""
+    from app.services.paper_batch import batch_enqueue_response, list_parse_missing_ids
+    from app.services.task_queue import enqueue_index_batch
+
+    ids = list_parse_missing_ids(limit=body.limit)
+    if not ids:
+        return JSONResponse(status_code=200, content={"ok": True, "matched": 0, "queued": 0, "failed": 0})
+    tasks = enqueue_index_batch(ids, force=body.force, reindex_only=False)
+    return JSONResponse(status_code=202, content=batch_enqueue_response(tasks, matched=len(ids)))
+
+
+@router.post("/summarize-missing")
+async def summarize_missing(body: MissingBatchQuery = MissingBatchQuery()):
+    """为已 indexed 但尚无 paper_summary 的文献批量入队摘要生成。"""
+    from app.services.paper_batch import batch_enqueue_response, list_summarize_missing_ids
+    from app.services.task_queue import enqueue_summarize_batch
+
+    ids = list_summarize_missing_ids(limit=body.limit)
+    if not ids:
+        return JSONResponse(status_code=200, content={"ok": True, "matched": 0, "queued": 0, "failed": 0})
+    tasks = enqueue_summarize_batch(ids, lang=body.lang)
+    return JSONResponse(status_code=202, content=batch_enqueue_response(tasks, matched=len(ids)))
 
 
 @router.get("/{paper_id}/pdf")

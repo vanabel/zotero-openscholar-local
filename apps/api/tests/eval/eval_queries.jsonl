@@ -1,0 +1,2 @@
+{"query": "Lorentz space Pohozaev identity", "expected_paper_ids": [], "expected_terms": ["Lorentz", "Pohozaev"], "notes": "填入索引后的 paper_id 以启用 expected_paper_ids 断言"}
+{"query": "α-YMH no-neck property", "expected_paper_ids": [], "expected_terms": ["YMH", "neck"], "notes": "专名检索；expected_terms 至少命中其一即计分"}

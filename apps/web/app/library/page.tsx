@@ -419,6 +419,33 @@ export default function LibraryPage() {
 
   const INDEX_BATCH_CHUNK = 500;
 
+  async function enqueueMissing(
+    path: "/papers/index-missing" | "/papers/parse-missing" | "/papers/summarize-missing",
+    label: string,
+  ) {
+    setBatchBusy(true);
+    setMsg(`正在提交：${label}…`);
+    try {
+      const res = await apiPost<{
+        matched?: number;
+        queued?: number;
+        failed?: number;
+      }>(path, {});
+      setTaskPolling(path !== "/papers/summarize-missing");
+      setMsg(
+        `${label}：匹配 ${res.matched ?? 0} 篇，已入队 ${res.queued ?? 0} 篇` +
+          (res.failed ? `，失败 ${res.failed} 篇` : "") +
+          "。",
+      );
+      await syncActiveTasks();
+      await refresh();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : `${label}失败`);
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
   async function indexSelected(force: boolean) {
     const ids = [...selected];
     if (ids.length === 0) {
@@ -510,6 +537,33 @@ export default function LibraryPage() {
             className="rounded-lg border border-mist-200 px-3 py-2 text-sm hover:bg-mist-100"
           >
             刷新
+          </button>
+          <button
+            type="button"
+            disabled={batchBusy}
+            onClick={() => void enqueueMissing("/papers/index-missing", "索引未建立")}
+            className="rounded-lg border border-mist-200 px-3 py-2 text-sm hover:bg-mist-50 disabled:opacity-50"
+            title="为 index_status 非 indexed 的文献批量入队"
+          >
+            索引未建立
+          </button>
+          <button
+            type="button"
+            disabled={batchBusy}
+            onClick={() => void enqueueMissing("/papers/parse-missing", "解析缺失")}
+            className="rounded-lg border border-mist-200 px-3 py-2 text-sm hover:bg-mist-50 disabled:opacity-50"
+            title="为尚无 document.md 的文献批量入队解析"
+          >
+            解析缺失
+          </button>
+          <button
+            type="button"
+            disabled={batchBusy}
+            onClick={() => void enqueueMissing("/papers/summarize-missing", "摘要缺失")}
+            className="rounded-lg border border-mist-200 px-3 py-2 text-sm hover:bg-mist-50 disabled:opacity-50"
+            title="为已索引但无 paper_summary 的文献生成摘要"
+          >
+            摘要缺失
           </button>
         </div>
       </div>

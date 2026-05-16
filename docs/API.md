@@ -29,6 +29,9 @@
 | POST | `/papers/{id}/index?reindex_only=true` | 仅重建分块/嵌入，复用 `document.md` |
 | POST | `/papers/{id}/reindex-only` | 同上 |
 | POST | `/papers/index-batch` | 批量；body 可含 `paper_ids`（最多 10000）、`force`、`reindex_only` |
+| POST | `/papers/index-missing` | 为未 indexed 文献入队；body 可选 `limit`、`force`、`reindex_only` |
+| POST | `/papers/parse-missing` | 为无 `document.md` 文献入队解析 |
+| POST | `/papers/summarize-missing` | 为已 indexed 且无 `paper_summary` 文献入队摘要（需 LLM） |
 
 ## 任务
 
