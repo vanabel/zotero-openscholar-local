@@ -21,6 +21,7 @@ openscholar = [
   "protobuf>=4.0",
 ]
 dev = ["ruff>=0.6.0", "pytest>=8.3.0", "python-docx>=1.1.0"]
+lance = ["lancedb>=0.17.0", "pyarrow>=15.0.0"]
 # 仅用于 scripts/download_mineru_local_models.py；装在本仓库 venv 内，勿污染系统 Python
 hf = [
   "huggingface_hub>=0.23.0",

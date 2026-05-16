@@ -52,9 +52,15 @@ def _api_json(resp: httpx.Response) -> dict:
     return data
 
 
-def _upload_and_submit(client: httpx.Client, pdf_path: Path, paper_id: str) -> str:
+def _upload_and_submit(
+    client: httpx.Client,
+    pdf_path: Path,
+    paper_id: str,
+    *,
+    model_version: str | None = None,
+) -> str:
     """申请上传 URL、上传 PDF，返回 batch_id。"""
-    model = (settings.mineru_cloud_model_version or "vlm").strip() or "vlm"
+    model = (model_version or settings.mineru_cloud_model_version or "vlm").strip() or "vlm"
     payload = {
         "files": [{"name": pdf_path.name, "data_id": paper_id[:128]}],
         "model_version": model,
@@ -481,6 +487,7 @@ def _parse_pdf_via_cloud_chunked(
     *,
     force_reparse: bool = False,
     pdf_sha256: str | None = None,
+    model_version: str | None = None,
 ) -> tuple[str, dict]:
     max_p = int(settings.mineru_cloud_max_pages_per_chunk)
     chunks_root = out_dir / "_mineru_cloud_chunks"
@@ -624,7 +631,9 @@ def _parse_pdf_via_cloud_chunked(
 
                 chunk_out.mkdir(parents=True, exist_ok=True)
                 chunk_id = f"{paper_id}_c{ci}"
-                md_i, part_meta = parse_pdf_via_cloud(chunk_file, chunk_id, chunk_out)
+                md_i, part_meta = parse_pdf_via_cloud(
+                    chunk_file, chunk_id, chunk_out, model_version=model_version
+                )
                 if part_meta.get("mineru_batch_id"):
                     meta[f"mineru_batch_id_c{ci}"] = part_meta["mineru_batch_id"]
 
@@ -668,6 +677,7 @@ def parse_pdf_via_cloud_with_splitting(
     *,
     force_reparse: bool = False,
     pdf_sha256: str | None = None,
+    model_version: str | None = None,
 ) -> tuple[str, dict]:
     """
     云端解析：未超页数则整份上传；超过 MINERU_CLOUD_MAX_PAGES_PER_CHUNK 时先用 pypdf 切片再合并结果。
@@ -694,10 +704,11 @@ def parse_pdf_via_cloud_with_splitting(
             out_dir,
             force_reparse=force_reparse,
             pdf_sha256=pdf_sha256,
+            model_version=model_version,
         )
 
     try:
-        return parse_pdf_via_cloud(pdf_path, paper_id, out_dir)
+        return parse_pdf_via_cloud(pdf_path, paper_id, out_dir, model_version=model_version)
     except MinerUCloudError as e:
         if _is_cloud_page_limit_error(e):
             plog_info("parse", "MinerU 云端页数限制，改为切片解析: %s", e)
@@ -707,11 +718,18 @@ def parse_pdf_via_cloud_with_splitting(
                 out_dir,
                 force_reparse=force_reparse,
                 pdf_sha256=pdf_sha256,
+                model_version=model_version,
             )
         raise
 
 
-def parse_pdf_via_cloud(pdf_path: Path, paper_id: str, out_dir: Path) -> tuple[str, dict]:
+def parse_pdf_via_cloud(
+    pdf_path: Path,
+    paper_id: str,
+    out_dir: Path,
+    *,
+    model_version: str | None = None,
+) -> tuple[str, dict]:
     """
     通过 MinerU 在线 API 解析本地 PDF，写入 out_dir/document.md。
     文档：https://mineru.net/doc/docs/index_en/
@@ -725,7 +743,7 @@ def parse_pdf_via_cloud(pdf_path: Path, paper_id: str, out_dir: Path) -> tuple[s
     timeout = httpx.Timeout(600.0, connect=30.0)
     try:
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            batch_id = _upload_and_submit(client, pdf_path, paper_id)
+            batch_id = _upload_and_submit(client, pdf_path, paper_id, model_version=model_version)
             meta["mineru_batch_id"] = batch_id
             zip_url = _poll_batch_done(client, batch_id, pdf_path.name)
             meta["mineru_zip_url"] = zip_url

@@ -420,6 +420,27 @@ def _dense_retrieve_all_scholar(
     allowed_paper_ids: set[str] | None = None,
     exclude_chunk_types: list[str] | None = None,
 ) -> list[str]:
+    from app.services.lance_store import search_scholar
+
+    lance_ids = search_scholar(query_vec, limit=limit, allowed_paper_ids=allowed_paper_ids)
+    if lance_ids is not None:
+        if exclude_chunk_types and lance_ids:
+            ph = ",".join("?" * len(lance_ids))
+            ex = ",".join("?" * len(exclude_chunk_types))
+            ok = {
+                str(r["id"])
+                for r in conn.execute(
+                    f"""
+                    SELECT id FROM chunks
+                    WHERE id IN ({ph})
+                      AND (chunk_type IS NULL OR chunk_type NOT IN ({ex}))
+                    """,
+                    (*lance_ids, *exclude_chunk_types),
+                ).fetchall()
+            }
+            return [cid for cid in lance_ids if cid in ok][:limit]
+        return lance_ids
+
     from app.services.openscholar_retrieval import parse_stored_embedding
 
     if allowed_paper_ids is not None and not allowed_paper_ids:

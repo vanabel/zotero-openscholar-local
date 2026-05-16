@@ -53,6 +53,45 @@ export async function apiPut<T = unknown>(path: string, body: unknown): Promise<
 
 export { BASE as API_BASE };
 
+export type TaskStreamEvent =
+  | { type: "snapshot"; items: unknown[] }
+  | {
+      type: "task_progress";
+      task_id: string;
+      paper_id?: string | null;
+      task_type?: string;
+      status?: string;
+      progress?: { phase?: string; done?: number; total?: number; message?: string };
+    }
+  | {
+      type: "task_status";
+      task_id: string;
+      paper_id?: string | null;
+      task_type?: string;
+      status: string;
+      error?: string | null;
+      progress?: { phase?: string; done?: number; total?: number; message?: string };
+    };
+
+/** SSE 订阅活动任务；浏览器端使用 EventSource。 */
+export function subscribeActiveTasks(
+  onEvent: (ev: TaskStreamEvent) => void,
+  onError?: (err: Event) => void,
+): () => void {
+  const es = new EventSource(`${BASE}/tasks/active/stream`);
+  es.onmessage = (msg) => {
+    try {
+      onEvent(JSON.parse(msg.data) as TaskStreamEvent);
+    } catch {
+      /* ignore malformed */
+    }
+  };
+  es.onerror = (e) => {
+    onError?.(e);
+  };
+  return () => es.close();
+}
+
 export type BilingualLang = "zh" | "en";
 
 export type BilingualStreamEvent =

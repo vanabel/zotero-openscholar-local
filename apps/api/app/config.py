@@ -123,6 +123,24 @@ class Settings(BaseSettings):
     # mineru CLI 轮询 mineru-api 任务状态的间隔（秒）；hybrid 每步约 20s+ 时默认 8 可减少 access log
     mineru_task_poll_interval_sec: float = Field(default=8.0, ge=1.0, le=120.0, validation_alias="MINERU_TASK_POLL_INTERVAL_SEC")
 
+    # 解析质量低于阈值时自动重试（云端 / 备用 model_version）
+    parse_quality_retry_enabled: bool = Field(default=True, validation_alias="PARSE_QUALITY_RETRY_ENABLED")
+    parse_quality_retry_threshold: float = Field(
+        default=0.65, ge=0.0, le=1.0, validation_alias="PARSE_QUALITY_RETRY_THRESHOLD"
+    )
+    mineru_cloud_model_version_retry: str = Field(
+        default="pipeline", validation_alias="MINERU_CLOUD_MODEL_VERSION_RETRY"
+    )
+
+    # LanceDB 稠密向量索引（替代 SQLite 全表 scholar 扫描）
+    lancedb_enabled: bool = Field(default=True, validation_alias="LANCEDB_ENABLED")
+
+    # 任务队列：embedded=API 进程内 Worker；external=仅 scripts/run_task_worker.py 消费
+    task_worker_mode: str = Field(default="embedded", validation_alias="TASK_WORKER_MODE")
+    task_worker_concurrency: int = Field(default=1, ge=1, le=4, validation_alias="TASK_WORKER_CONCURRENCY")
+    mineru_parse_concurrency: int = Field(default=1, ge=1, le=2, validation_alias="MINERU_PARSE_CONCURRENCY")
+    index_embed_concurrency: int = Field(default=2, ge=1, le=8, validation_alias="INDEX_EMBED_CONCURRENCY")
+
     # 启动时 SQLite VACUUM：强制每次执行，或 freelist/page_count ≥ 比例阈值时自动执行
     db_vacuum_on_startup: bool = Field(default=False, validation_alias="DB_VACUUM_ON_STARTUP")
     db_vacuum_freelist_ratio: float = Field(
@@ -132,6 +150,13 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     pipeline_log: int = Field(default=0, ge=0, le=2, validation_alias="PIPELINE_LOG")
     log_stages: str = Field(default="", validation_alias="LOG_STAGES")
+
+    @field_validator("task_worker_mode", mode="before")
+    @classmethod
+    def _normalize_task_worker_mode(cls, v):
+        if v is None:
+            return "embedded"
+        return str(v).strip().lower()
 
     @field_validator("chat_provider", "embed_provider", mode="before")
     @classmethod
@@ -147,6 +172,8 @@ class Settings(BaseSettings):
         for field, val in (("chat_provider", self.chat_provider), ("embed_provider", self.embed_provider)):
             if val not in ("auto", "ollama", "openai"):
                 raise ValueError(f"{field} must be one of: auto, ollama, openai (got {val!r})")
+        if self.task_worker_mode not in ("embedded", "external"):
+            raise ValueError("task_worker_mode must be embedded or external")
         return self
 
     def openai_ready(self) -> bool:
@@ -188,6 +215,15 @@ class Settings(BaseSettings):
         p = self.data_dir / "parsed"
         p.mkdir(parents=True, exist_ok=True)
         return p
+
+    @property
+    def lance_dir(self) -> Path:
+        p = self.data_dir / "lance"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def task_worker_embedded(self) -> bool:
+        return (self.task_worker_mode or "embedded").strip().lower() != "external"
 
 
 settings = Settings()

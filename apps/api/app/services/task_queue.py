@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from app.db import get_db, json_dumps_safe, row_to_dict
 from app.services.zotero_scanner import get_paper
+from app.config import settings
 from app.pipeline_logging import plog_info
 
 _worker_task: asyncio.Task | None = None
@@ -36,6 +37,20 @@ class TaskProgress:
                 "UPDATE tasks SET progress_json = ?, updated_at = ? WHERE id = ?",
                 (json_dumps_safe(payload), now, self.task_id),
             )
+        row = _task_row(self.task_id)
+        if row:
+            from app.services.task_events import publish_task_event
+
+            publish_task_event(
+                {
+                    "type": "task_progress",
+                    "task_id": self.task_id,
+                    "paper_id": row.get("paper_id"),
+                    "task_type": row.get("task_type"),
+                    "status": row.get("status"),
+                    "progress": payload,
+                }
+            )
 
 
 def _default_message(phase: str, done: int, total: int) -> str:
@@ -46,6 +61,7 @@ def _default_message(phase: str, done: int, total: int) -> str:
         "embed": "向量嵌入",
         "scholar_embed": "OpenScholar 嵌入",
         "save": "写入索引",
+        "summarize": "生成摘要",
         "done": "完成",
     }
     label = labels.get(phase, phase)
@@ -282,12 +298,15 @@ async def _run_summarize_task(task_id: str) -> None:
                     ),
                 )
             plog_info("task", "完成 summarize task_id=%s paper_id=%s", task_id, paper_id)
+            _publish_task_status(task_id, status="completed")
         else:
             err = result.get("error") or "摘要失败"
             _fail_task(task_id, paper_id, err, result, touch_index_status=False)
+            _publish_task_status(task_id, status="failed", error=err)
     except Exception as e:
         plog_info("task", "异常 summarize task_id=%s: %s", task_id, e)
         _fail_task(task_id, paper_id, str(e), None, touch_index_status=False)
+        _publish_task_status(task_id, status="failed", error=str(e))
 
 
 async def _run_index_task(task_id: str) -> None:
@@ -331,12 +350,15 @@ async def _run_index_task(task_id: str) -> None:
                     ),
                 )
             plog_info("task", "完成 index task_id=%s paper_id=%s", task_id, paper_id)
+            _publish_task_status(task_id, status="completed")
         else:
             err = result.get("error") or "索引失败"
             _fail_task(task_id, paper_id, err, result)
+            _publish_task_status(task_id, status="failed", error=err)
     except Exception as e:
         plog_info("task", "异常 index task_id=%s: %s", task_id, e)
         _fail_task(task_id, paper_id, str(e), None)
+        _publish_task_status(task_id, status="failed", error=str(e))
 
 
 def _fail_task(
@@ -362,17 +384,45 @@ def _fail_task(
         set_paper_status(paper_id, index_status="failed", status_message=error[:2000])
 
 
+def _publish_task_status(task_id: str, *, status: str, error: str | None = None) -> None:
+    row = _task_row(task_id)
+    if not row:
+        return
+    from app.services.task_events import publish_task_event
+
+    publish_task_event(
+        {
+            "type": "task_status",
+            "task_id": task_id,
+            "paper_id": row.get("paper_id"),
+            "task_type": row.get("task_type"),
+            "status": status,
+            "error": error,
+            "progress": _parse_json_field(row.get("progress_json")),
+        }
+    )
+
+
+async def _dispatch_task(task_id: str) -> None:
+    row = _task_row(task_id)
+    if row and row.get("task_type") == "summarize":
+        await _run_summarize_task(task_id)
+    else:
+        await _run_index_task(task_id)
+
+
 async def _worker_loop() -> None:
-    while True:
-        task_id = await _queue.get()
-        try:
-            row = _task_row(task_id)
-            if row and row.get("task_type") == "summarize":
-                await _run_summarize_task(task_id)
-            else:
-                await _run_index_task(task_id)
-        finally:
-            _queue.task_done()
+    n = max(1, int(settings.task_worker_concurrency))
+
+    async def _consumer() -> None:
+        while True:
+            task_id = await _queue.get()
+            try:
+                await _dispatch_task(task_id)
+            finally:
+                _queue.task_done()
+
+    await asyncio.gather(*[_consumer() for _ in range(n)])
 
 
 def _resume_queued_tasks() -> None:
@@ -391,10 +441,15 @@ def _resume_queued_tasks() -> None:
         plog_info("task", "恢复 %s 个未完成任务", len(rows))
 
 
-def start_worker() -> None:
+def start_worker(*, standalone: bool = False) -> None:
     global _worker_task
+    if not standalone and not settings.task_worker_embedded():
+        plog_info("task", "TASK_WORKER_MODE=external，API 进程不启动 Worker")
+        return
     _resume_queued_tasks()
     if _worker_task is None or _worker_task.done():
+        n = max(1, int(settings.task_worker_concurrency))
+        plog_info("task", "启动 embedded Worker concurrency=%s", n)
         _worker_task = asyncio.create_task(_worker_loop(), name="index-task-worker")
 
 

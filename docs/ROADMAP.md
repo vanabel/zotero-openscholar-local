@@ -68,7 +68,7 @@
 | 统计：页数、章节、公式/表/图、OCR 比例、乱码比例 | `[x]` 写入 `parse_reports` |
 | Markdown 清洗（页眉页脚、断行、参考文献区） | `[x]` `clean_markdown.py`；解析后写入 `document.md` |
 | 前端：section tree、质量分、警告、低质量筛选 | `[x]` 文献库质量徽章、`/papers/quality-summary`、低质量/未评分筛选 |
-| 低分重试（cloud / OCR） | `[ ]` |
+| 低分重试（cloud / OCR） | `[x]` `parse_retry.py`；云端备用 `MINERU_CLOUD_MODEL_VERSION_RETRY` |
 
 ### 「质量 未评分」何时更新
 
@@ -118,7 +118,7 @@
 | Chunk 内容去重（检索结果级） | `[x]` `dedupe_chunks_by_text`（`retriever.py`） |
 | 查询扩展 / 专名同义词 | `[~]` 双语 Hy-MT 扩展已有 |
 | `eval_queries.jsonl` + 评测脚本 | `[x]` `tests/eval/eval_queries.jsonl`；`scripts/eval_retrieval.py` |
-| LanceDB 替代 SQLite 全表 dense 扫描 | `[ ]` |
+| LanceDB 替代 SQLite 全表 dense 扫描 | `[x]` `lance_store.py`；`LANCEDB_ENABLED`；未安装时回退 SQLite |
 | `POST /papers/index-missing` | `[x]` 另含 `parse-missing`、`summarize-missing` |
 
 **验收**：top-k 不被单篇垄断；评测集可回归。
@@ -170,10 +170,10 @@
 | 文献库前端轮询进度 | `[x]` 索引徽章 `indexing` + 阶段文案 |
 | 服务重启恢复未完成任务 | `[x]` 启动时 `queued`/`running` 重新入队 |
 | 同步索引（脚本 / 调试） | `[x]` `?wait=true` 或 CLI `reindex_library.py` 直调 `index_paper` |
-| 进度 SSE / WebSocket | `[ ]` 当前为 HTTP 轮询 |
+| 进度 SSE / WebSocket | `[x]` `GET /tasks/active/stream`；文献库 EventSource |
 | `parse-missing` / `index-missing` / `summarize-missing` | `[x]` `POST /papers/*-missing`；摘要任务 `task_type=summarize` |
-| MinerU / 嵌入并发限制（M4 24G） | `[ ]` Worker 串行 1；OpenScholar 与 Ollama embed 仍顺序执行 |
-| 独立 Worker 进程 / API 与慢任务分离 | `[ ]` |
+| MinerU / 嵌入并发限制（M4 24G） | `[x]` `MINERU_PARSE_CONCURRENCY`、`INDEX_EMBED_CONCURRENCY`、`TASK_WORKER_CONCURRENCY` |
+| 独立 Worker 进程 / API 与慢任务分离 | `[x]` `TASK_WORKER_MODE=external` + `scripts/run_task_worker.py`；`pnpm run dev:external` |
 
 **索引嵌入说明**（与 `EMBED_PROVIDER` 独立）：
 

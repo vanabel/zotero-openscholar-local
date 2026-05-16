@@ -18,6 +18,8 @@ pnpm install
 pnpm run setup          # .venv + pip install -e ".[dev,hf,openscholar]"
 pnpm dev                # mineru-api + API :8000 + Web :3000
 pnpm run dev:no-mineru  # 无 MinerU 时
+pnpm run dev:external   # API 不入队消费 + 独立 Worker + Web
+pnpm run dev:worker     # 仅任务 Worker（需 TASK_WORKER_MODE=external）
 ```
 
 浏览器：<http://localhost:3000> · API：<http://127.0.0.1:8000>

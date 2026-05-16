@@ -57,9 +57,13 @@ async def lifespan(app: FastAPI):
 
     maybe_vacuum_database_on_startup()
     _log_openscholar_startup()
-    start_worker()
+    if settings.task_worker_embedded():
+        start_worker()
+    else:
+        plog_info("task", "TASK_WORKER_MODE=external：索引入队由独立 Worker 进程消费")
     yield
-    await stop_worker()
+    if settings.task_worker_embedded():
+        await stop_worker()
 
 
 app = FastAPI(

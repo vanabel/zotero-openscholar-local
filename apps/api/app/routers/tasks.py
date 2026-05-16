@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -15,6 +16,20 @@ def list_active(
     ids = [x.strip() for x in paper_ids.split(",") if x.strip()] if paper_ids else None
     items = list_active_tasks(paper_ids=ids)
     return {"items": items}
+
+
+@router.get("/active/stream")
+async def stream_active_tasks():
+    """SSE：推送活动任务进度与状态变更（替代高频轮询 /tasks/active）。"""
+    from app.services.task_events import sse_stream
+    from app.services.task_queue import list_active_tasks
+
+    initial = {"type": "snapshot", "items": list_active_tasks()}
+    return StreamingResponse(
+        sse_stream(initial=initial),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/{task_id}")

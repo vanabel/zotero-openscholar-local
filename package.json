@@ -4,7 +4,10 @@
   "description": "Monorepo orchestration (API + Web dev/test)",
   "scripts": {
     "setup": "npm run setup:api && npm run setup:web",
-    "setup:api": "cd apps/api && (test -d .venv || python3 -m venv .venv) && .venv/bin/pip install -U pip -q && .venv/bin/pip install -e '.[dev,hf,openscholar]' -q",
+    "setup:api": "cd apps/api && (test -d .venv || python3 -m venv .venv) && .venv/bin/pip install -U pip -q && .venv/bin/pip install -e '.[dev,hf,openscholar,lance]' -q",
+    "dev:worker": "cd apps/api && .venv/bin/python scripts/run_task_worker.py",
+    "dev:external": "concurrently -k -n mineru,api,worker,web -c blue,cyan,yellow,magenta \"npm run dev:mineru-api\" \"npm run dev:api:external\" \"npm run dev:worker\" \"npm run dev:web\"",
+    "dev:api:external": "cd apps/api && TASK_WORKER_MODE=external .venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
     "setup:api:openscholar": "cd apps/api && .venv/bin/pip install -e '.[openscholar]' -q",
     "download:mineru-models": "cd apps/api && .venv/bin/python scripts/download_mineru_local_models.py --base ./data/mineru-models",
     "reindex": "cd apps/api && .venv/bin/python scripts/reindex_library.py",

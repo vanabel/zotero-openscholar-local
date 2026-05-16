@@ -26,7 +26,9 @@ from app.services.pdf_parse import (
     parsed_pdf_sha256,
     sha256_text,
 )
+from app.services.parse_retry import maybe_retry_low_quality_parse
 from app.services.task_queue import TaskProgress
+from app.services.task_runtime import index_embed_semaphore, mineru_parse_semaphore
 from app.services.zotero_scanner import get_paper
 
 
@@ -196,14 +198,15 @@ async def index_paper(
             plog_info("index", "强制重建：已清空解析缓存目录 %s（%s 项）", out_dir, cleared)
         if progress:
             progress.update("parse", 0, 1, "MinerU 解析中…")
-        md, meta = await asyncio.to_thread(
-            parse_one,
-            paper_id,
-            pdf_path,
-            out_dir,
-            force_reparse=force,
-            pdf_sha256=(pdf_sha.strip() or None) if pdf_sha else None,
-        )
+        async with mineru_parse_semaphore():
+            md, meta = await asyncio.to_thread(
+                parse_one,
+                paper_id,
+                pdf_path,
+                out_dir,
+                force_reparse=force,
+                pdf_sha256=(pdf_sha.strip() or None) if pdf_sha else None,
+            )
         if progress:
             progress.update("parse", 1, 1, "解析完成")
         md = clean_markdown(md)
@@ -212,6 +215,9 @@ async def index_paper(
         meta["markdown_cleaned"] = True
         (out_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         report = analyze_markdown(md, parser=str(meta.get("mode") or "mineru"), parser_mode=meta.get("parser_mode"))
+        md, meta, report = await maybe_retry_low_quality_parse(
+            paper_id, pdf_path, out_dir, md, meta, report, force=force
+        )
         prev = None if force else latest_parse_report(paper_id)
         if prev and (prev.get("parse_quality_score") or 0) > (report.get("parse_quality_score") or 0):
             plog_info(
@@ -325,7 +331,8 @@ async def index_paper(
         if progress:
             progress.update("embed", done, n_texts)
         try:
-            vecs = await embed_client.embed(slice_t)
+            async with index_embed_semaphore():
+                vecs = await embed_client.embed(slice_t)
             for j, v in enumerate(vecs):
                 embeddings[i + j] = v
         except Exception as e:
@@ -360,7 +367,8 @@ async def index_paper(
                 done = min(i + len(slice_t), len(texts))
                 if progress:
                     progress.update("scholar_embed", done, len(texts))
-                vecs = await asyncio.to_thread(_encode_scholar_batch, slice_t)
+                async with index_embed_semaphore():
+                    vecs = await asyncio.to_thread(_encode_scholar_batch, slice_t)
                 for j, v in enumerate(vecs):
                     scholar_embeddings[i + j] = v
         except Exception as e:
@@ -376,7 +384,7 @@ async def index_paper(
     if progress:
         progress.update("save", 0, 1, "写入数据库…")
     with get_db() as conn:
-        save_paper_chunks(
+        chunk_ids = save_paper_chunks(
             conn,
             paper_id,
             drafts,
@@ -384,6 +392,9 @@ async def index_paper(
             scholar_embeddings,
             md_hash=md_hash,
         )
+    from app.services.lance_store import replace_paper_vectors
+
+    replace_paper_vectors(paper_id, chunk_ids, scholar_embeddings)
     if progress:
         progress.update("save", 1, 1, "完成")
 

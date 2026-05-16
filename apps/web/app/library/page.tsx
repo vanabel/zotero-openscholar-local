@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost, API_BASE } from "@/lib/api";
+import { apiGet, apiPost, API_BASE, subscribeActiveTasks, type TaskStreamEvent } from "@/lib/api";
 
 const LOW_QUALITY_THRESHOLD = 0.65;
 
@@ -183,6 +183,7 @@ function PaperMetaLines({ p }: { p: Paper }) {
 type IndexTaskRow = {
   id: string;
   paper_id?: string | null;
+  task_type?: string;
   status: string;
   progress?: { phase?: string; done?: number; total?: number; message?: string } | null;
   error?: string | null;
@@ -298,9 +299,51 @@ export default function LibraryPage() {
 
   useEffect(() => {
     if (!taskPolling) return;
-    const iv = window.setInterval(() => void syncActiveTasks(), 1500);
-    return () => window.clearInterval(iv);
-  }, [taskPolling, syncActiveTasks]);
+    const close = subscribeActiveTasks((ev: TaskStreamEvent) => {
+      if (ev.type === "snapshot") {
+        const items = ev.items as IndexTaskRow[];
+        const m = new Map<string, IndexTaskRow>();
+        let anyActive = false;
+        for (const t of items) {
+          const pid = t.paper_id;
+          if (pid) m.set(pid, t);
+          if (t.status === "queued" || t.status === "running") anyActive = true;
+        }
+        setPaperTasks(m);
+        if (!anyActive) {
+          setTaskPolling(false);
+          void refresh();
+        }
+        return;
+      }
+      const pid = ev.paper_id;
+      if (!pid) return;
+      const err = ev.type === "task_status" ? ev.error : undefined;
+      setPaperTasks((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(pid);
+        next.set(pid, {
+          ...(existing ?? {
+            id: ev.task_id,
+            paper_id: pid,
+            task_type: ev.task_type ?? "index",
+            status: ev.status ?? "running",
+          }),
+          id: ev.task_id,
+          paper_id: pid,
+          task_type: ev.task_type ?? existing?.task_type ?? "index",
+          status: ev.status ?? existing?.status ?? "running",
+          progress: ev.progress ?? existing?.progress,
+          error: err ?? existing?.error,
+        });
+        return next;
+      });
+      if (ev.type === "task_status" && ev.status !== "queued" && ev.status !== "running") {
+        void syncActiveTasks();
+      }
+    });
+    return close;
+  }, [taskPolling, refresh, syncActiveTasks]);
 
   const allSelected = useMemo(
     () => items.length > 0 && items.every((p) => selected.has(p.id)),

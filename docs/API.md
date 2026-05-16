@@ -38,6 +38,7 @@
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/tasks/active` | 进行中任务 |
+| GET | `/tasks/active/stream` | SSE：任务进度与状态推送 |
 | GET | `/tasks/{id}` | 状态与 `progress_json` |
 
 ## 问答
