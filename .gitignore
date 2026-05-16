@@ -5,6 +5,7 @@ apps/api/.venv/
 apps/web/node_modules/
 node_modules/
 apps/web/.next/
+apps/web/tsconfig.tsbuildinfo
 **/__pycache__/
 .pytest_cache/
 *.pyc
