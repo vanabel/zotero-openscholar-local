@@ -1,4 +1,5 @@
 #!/bin/bash
+# 仅 OpenScholar scholar 向量。本地只解析 + 双嵌入请用 submit_vectors.slurm
 #SBATCH --job-name=zos-scholar
 #SBATCH --output=scholar_embed_%j.log
 #SBATCH --error=scholar_embed_%j.err

@@ -165,13 +165,18 @@ async def index_paper(
         return {"ok": False, "error": err}
 
     pdf_path = Path(paper["pdf_path"])
-    if not pdf_path.exists():
-        err = "PDF 文件不存在"
-        set_paper_status(paper_id, index_status="failed", status_message=err)
-        return {"ok": False, "error": err}
-
     out_dir = _parsed_dir(paper_id)
     out_dir.mkdir(parents=True, exist_ok=True)
+    if not pdf_path.exists():
+        if reindex_only and load_parsed_markdown(out_dir) is not None:
+            plog_info(
+                "index",
+                "PDF 不在本机路径（常见于超算仅同步 parsed/），reindex_only 且已有 Markdown，继续",
+            )
+        else:
+            err = "PDF 文件不存在"
+            set_paper_status(paper_id, index_status="failed", status_message=err)
+            return {"ok": False, "error": err}
 
     reused_parse = False
     reused_index = False

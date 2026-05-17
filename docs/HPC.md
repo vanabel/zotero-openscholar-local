@@ -1,145 +1,136 @@
-# 超算（SLURM）批量 OpenScholar 向量
+# 超算（SLURM）批量向量：分块 + 双嵌入
 
-在**学校 GPU 集群**上仅计算 `scholar_embedding_json`（OpenScholar Retriever），**不**重建分块、**不**调用 Ollama/OpenAI 的 `embedding_json`。适合 Mac 本地已完成解析与普通嵌入后，把最耗 GPU 的 Retriever 批处理放到超算。
+适合 **Mac 本地只解析 PDF**（`document.md`），在 **GPU 集群**上完成分块、`embedding_json`（OpenAI 兼容 API，**无 Ollama**）与 `scholar_embedding_json`（OpenScholar Retriever / CUDA）。
 
-调度器：**SLURM**（见 `scripts/hpc/submit_scholar.slurm`）。
+调度器：**SLURM**。一键脚本：`scripts/hpc/submit_vectors.slurm`（仅 scholar 时仍可用 `submit_scholar.slurm`）。
 
 ## 流程概览
 
 ```text
-Mac（本地）                         超算（SLURM GPU 作业）
-──────────                         ─────────────────────
-扫描 + 解析 + 建立索引              rsync 上行
-  → parsed/{id}/document.md    →    app.sqlite（含 chunks.text、embedding_json）
-  → chunks + embedding_json         OPENSCHOLAR_DEVICE=cuda
-                                    scholar_embed_batch.py
-rsync 下行                     ←    app.sqlite（含 scholar_embedding_json）
-  → 可选 data/lance/                lance/（若 LANCEDB_ENABLED=1）
-重启 API / backfill-lance
+Mac（本地）                              超算（SLURM）
+──────────                              ────────────
+扫描 Zotero + MinerU/pypdf 解析          rsync 上行：
+  → data/parsed/{id}/document.md    →     app.sqlite + parsed/
+  （可不建索引、不跑嵌入）                 （PDF 路径可不存在）
+
+                                        1. chunk_batch.py      → chunks（无向量）
+                                        2. embed_batch.py      → embedding_json（HTTP API）
+                                        3. scholar_embed_batch → scholar_embedding_json（GPU）
+
+rsync 下行                           ←   app.sqlite + lance/
+本地重启 API
 ```
 
-**注意**：`paper_id` 由 PDF **绝对路径**哈希得到。请同步 Mac 上生成的 `app.sqlite` 与 `parsed/`，不要在超算上重新扫 Zotero 生成新 ID。
+**`paper_id`** 由 Mac 上 PDF 绝对路径哈希；请同步 Mac 生成的 **`app.sqlite`** 与 **`parsed/`**，勿在超算重新扫库。
 
-## 一键提交（SLURM）
+## 一键提交
 
-### 1. 登录节点准备
+### 1. 登录节点
 
 ```bash
-git clone <repo-url> ~/zotero-openscholar-local
+git clone <repo> ~/zotero-openscholar-local
 cd ~/zotero-openscholar-local/apps/api
 python3 -m venv .venv
 .venv/bin/pip install -e '.[openscholar,lance]'
 
 cp .env.hpc.example .env.hpc
-# 编辑 .env.hpc：DATA_DIR、HF_TOKEN、批次大小等
+# 必填：DATA_DIR、OPENAI_API_*、HF_TOKEN（若需）
 ```
 
-从 Mac 同步数据（示例）：
+Mac 同步（示例）：
 
 ```bash
-rsync -avz ./apps/api/data/ login:/path/to/synced/data/
+rsync -avz ./apps/api/data/app.sqlite login:/path/to/synced/data/
+rsync -avz ./apps/api/data/parsed/ login:/path/to/synced/data/parsed/
 ```
 
-`synced/data` 下需含 `app.sqlite`；若仅补 scholar、不重解析，**不必**上传 PDF。
+### 2. 配置 `.env.hpc`（无 Ollama、允许出网）
 
-### 2. 预拉模型（建议，避免作业排队时下载失败）
+| 变量 | 说明 |
+|------|------|
+| `EMBED_PROVIDER=openai` | **必须**；`embed_batch` 不走 Ollama |
+| `OPENAI_API_BASE` / `OPENAI_API_KEY` / `OPENAI_EMBED_MODEL` | 嵌入 API（OpenAI 或兼容网关） |
+| `OPENSCHOLAR_DEVICE=cuda` | Retriever 用 GPU |
+| `OPENSCHOLAR_RETRIEVER_ENABLED=1` | scholar 向量 |
+| `LANCEDB_ENABLED=1` | 与本地一致，便于 rsync `lance/` |
 
-```bash
-export HF_HOME=/scratch/$USER/hf_cache
-cd ~/zotero-openscholar-local/apps/api
-.venv/bin/python -c "
-from transformers import AutoModel, AutoTokenizer
-m='OpenSciLM/OpenScholar_Retriever'
-AutoTokenizer.from_pretrained(m)
-AutoModel.from_pretrained(m)
-"
-```
+模板：`apps/api/.env.hpc.example`。
 
-### 3. 编辑 SLURM 脚本并提交
+### 3. 提交作业
 
-编辑 `scripts/hpc/submit_scholar.slurm` 顶部的 `#SBATCH`（**分区、`--gres=gpu:1`** 等按学校模板填写），以及默认变量 `REPO_ROOT`、`DATA_DIR`。
+编辑 `scripts/hpc/submit_vectors.slurm` 的 `#SBATCH`（分区、`--gres=gpu:1`），然后：
 
 ```bash
 cd ~/zotero-openscholar-local
 export REPO_ROOT=$PWD
 export DATA_DIR=/path/to/synced/data
-export ENV_FILE=$REPO_ROOT/apps/api/.env.hpc
-sbatch scripts/hpc/submit_scholar.slurm
+sbatch scripts/hpc/submit_vectors.slurm
 ```
 
-覆盖环境变量示例：
+跳过某一步（例如已有 chunk，只补向量）：
 
 ```bash
-sbatch --export=ALL,MISSING_ONLY=1,FORCE=0,DATA_DIR=/scratch/$USER/zos-data \
-  scripts/hpc/submit_scholar.slurm
+sbatch --export=ALL,RUN_CHUNK=0,RUN_EMBED=1,RUN_SCHOLAR=1,DATA_DIR=/path/to/data \
+  scripts/hpc/submit_vectors.slurm
 ```
 
-### 4. 回传与本地收尾
+### 4. 回传 Mac
 
 ```bash
 rsync -avz login:/path/to/synced/data/app.sqlite ./apps/api/data/
 rsync -avz login:/path/to/synced/data/lance/ ./apps/api/data/lance/
 ```
 
-本地重启 API。若只回了 SQLite、未回 `lance/`：在文献库或通过 `POST /papers/backfill-lance` 将 scholar 向量写入 LanceDB。
+本地 `.env` 可继续 `EMBED_PROVIDER=ollama`（与超算写入的 `embedding_json` 维度/模型需一致：若超算用 `text-embedding-3-small`，本地检索也应使用同一嵌入模型，或超算后用同一 API 模型）。
 
-## 命令行（不经过 SLURM）
-
-在 `apps/api` 下：
+## 分步命令（apps/api）
 
 ```bash
-# 仅补缺失 scholar 向量（推荐）
+# 1. 从 parsed Markdown 分块（本地只解析后）
+.venv/bin/python scripts/chunk_batch.py --all --missing-only
+
+# 2. OpenAI 兼容嵌入
+.venv/bin/python scripts/embed_batch.py --all --missing-only
+
+# 3. OpenScholar Retriever（GPU）
 .venv/bin/python scripts/scholar_embed_batch.py --all --missing-only
-
-# 指定文献
-.venv/bin/python scripts/scholar_embed_batch.py --paper-id <32位id>
-
-# 强制全量重算 scholar
-.venv/bin/python scripts/scholar_embed_batch.py --all --force
-
-# 只写 SQLite，不写 Lance
-.venv/bin/python scripts/scholar_embed_batch.py --all --missing-only --no-lance
 ```
 
 仓库根目录：
 
 ```bash
-pnpm run scholar:embed
+pnpm run hpc:vectors   # 本地调试：顺序执行上述三步（需 .env 配 openai + openscholar）
 ```
 
-## 环境变量（`.env.hpc`）
+## 脚本对照
 
-| 变量 | 建议（超算） |
-|------|----------------|
-| `DATA_DIR` | 同步后的数据目录（含 `app.sqlite`） |
-| `OPENSCHOLAR_RETRIEVER_ENABLED` | `1` |
-| `OPENSCHOLAR_RERANKER_ENABLED` | `0`（建库不需要 Reranker） |
-| `OPENSCHOLAR_DEVICE` | `cuda` |
-| `OPENSCHOLAR_ENCODE_BATCH_SIZE` | 按 GPU 显存调大（如 16–64） |
-| `LANCEDB_ENABLED` | `1`（与本地一致时可直接 rsync `lance/`） |
-| `HF_HOME` / `HF_TOKEN` | 集群缓存目录与 Hugging Face 令牌 |
+| 脚本 | 分块 | `embedding_json` | `scholar_embedding_json` | 需要 |
+|------|------|------------------|---------------------------|------|
+| `chunk_batch.py` | 是 | 否 | 否 | `parsed/document.md` |
+| `embed_batch.py` | 否 | 是 | 否 | chunk + `EMBED_PROVIDER=openai` + 出网 |
+| `scholar_embed_batch.py` | 否 | 否 | 是 | chunk + GPU + `[openscholar]` |
+| `reindex_library.py` | 是 | 是 | 是 | `parsed/`；`reindex_only` 时 PDF 可不在本机 |
 
-模板：`apps/api/.env.hpc.example`。
+## 本地 Mac 推荐操作
 
-## 与 `reindex_library.py` 的区别
+1. 文献库：**扫描** → **解析缺失**（或单篇解析），得到 `parsed/`。  
+2. **不要**在 Mac 上跑全库嵌入（可选）。  
+3. rsync `app.sqlite` + `parsed/` 到超算 → `sbatch submit_vectors.slurm`。  
+4. 拉回库文件，重启 `pnpm dev`。
 
-| 脚本 | 分块 | `embedding_json` | `scholar_embedding_json` | MinerU |
-|------|------|------------------|---------------------------|--------|
-| `reindex_library.py` | 是 | 是 | 是 | 否 |
-| `scholar_embed_batch.py` | 否 | **否** | 是 | 否 |
+若 Mac 上已部分索引，超算设 `MISSING_ONLY=1`（默认）只补缺失向量。
 
 ## 故障排查
 
 | 现象 | 处理 |
 |------|------|
-| `OpenScholar 依赖未安装` | `pip install -e '.[openscholar]'` |
-| `OPENSCHOLAR_RETRIEVER_ENABLED=0` | 检查 `.env.hpc` |
-| CUDA OOM | 减小 `OPENSCHOLAR_ENCODE_BATCH_SIZE` |
-| 作业无 GPU | 检查 `#SBATCH --gres` 与分区 |
-| 本地检索仍慢 | 确认 scholar 已写入；启用 Lance 并 backfill |
+| `embed 需要 EMBED_PROVIDER=openai` | 在 `.env.hpc` 设置并 `source` |
+| API 429 / 超时 | 减小 `embed_batch --batch-size`；检查配额 |
+| `无 chunk` | 先跑 `chunk_batch` 或检查 `parsed/` 是否同步 |
+| `PDF 文件不存在`（reindex） | 已支持「有 Markdown 无 PDF」；优先用三件套脚本 |
+| scholar CUDA OOM | 减小 `OPENSCHOLAR_ENCODE_BATCH_SIZE` |
 
 ## 参考
 
-- [CONFIGURATION.md](./CONFIGURATION.md) — OpenScholar 模型与检索开关  
-- [OPERATIONS.md](./OPERATIONS.md) — `DATA_DIR` 与备份  
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — 索引与检索流水线  
+- [CONFIGURATION.md](./CONFIGURATION.md) — Provider 与 OpenScholar  
+- [OPERATIONS.md](./OPERATIONS.md) — `DATA_DIR`、备份  
