@@ -36,7 +36,8 @@
 | 双语检索 / 答案（可选） | `[x]` |
 | Next.js：概览、文献库、问答、综述、设置 | `[x]` |
 | `CHAT_PROVIDER` / `EMBED_PROVIDER` 分离 + `OPENAI_EMBED_MODEL` | `[x]` 见 `.env.example` 组合表 |
-| 文献库索引：后台任务队列 + 轮询进度 | `[x]` 见 P6 |
+| 文献库索引：后台任务队列 + SSE 进度 | `[x]` 见 P6 |
+| 文献库 AI 摘要展示 + 任务队列管理面板 | `[x]` 见 P5 / P6 |
 
 ---
 
@@ -48,7 +49,7 @@
 |------|------|
 | 统一错误 JSON（LLM / MinerU / OpenScholar / 无 document.md） | `[x]` `app/errors.py` + 全局 handler |
 | 文献库：parse/index 失败原因、重试、仅重建索引 | `[x]` `status_message`（含解析降级提示）、`GET /parse-meta`、重试索引/重试解析 |
-| document.md / chunk 预览 | `[x]` `GET /papers/{id}/document`、`/chunks` + 文献库展开预览 |
+| document.md / chunk / AI 摘要预览 | `[x]` `GET /papers/{id}/document`、`/chunks`、`/summary` + 文献库展开预览 |
 | 最小回归集 fixture（3 英 + 3 中 + 扫描 + 公式 + 图表） | `[x]` 见 [QUALITY_BASELINE.md](./QUALITY_BASELINE.md) |
 | CI：`pnpm test` 默认绿，Ollama/MinerU 标 optional | `[x]` `.github/workflows/ci.yml`；`@pytest.mark.optional`；`pnpm test:api:optional` |
 | pytest 与开发库 `DATA_DIR` 隔离 | `[x]` `tests/conftest.py` + `test_data_dir_isolation.py` |
@@ -152,6 +153,7 @@
 | C. 对比综述（表格） | `[x]` `template=comparative_review`（Markdown 表） |
 | D. 项目申请书（现状 / 科学问题 / 切入点 / 创新性） | `[x]` `template=grant_proposal` |
 | `summaries` 表参与综述（先 summary 再 chunk） | `[x]` `summaries.py` 综述检索优先 |
+| 文献库展示 `paper_summary` | `[x]` `GET /papers/{id}/summary`；列表 `has_paper_summary`；展开详情 + 生成摘要 |
 | 按标签 / 集合 / 年份限定文献范围 | `[x]` `RetrievalScope` + 问答/综述请求体 |
 | 导出 Markdown / DOCX | `[x]` `export-markdown` + `export-docx`（python-docx） |
 
@@ -171,7 +173,9 @@
 | 服务重启恢复未完成任务 | `[x]` 启动时 `queued`/`running` 重新入队 |
 | 同步索引（脚本 / 调试） | `[x]` `?wait=true` 或 CLI `reindex_library.py` 直调 `index_paper` |
 | 进度 SSE / WebSocket | `[x]` `GET /tasks/active/stream`；文献库 EventSource |
+| 任务队列统计与管理 | `[x]` `GET /tasks/stats`；`POST /tasks/cancel-queued`、`cancel-orphans`；文献库 `TaskStatsPanel` |
 | `parse-missing` / `index-missing` / `summarize-missing` | `[x]` `POST /papers/*-missing`；摘要任务 `task_type=summarize` |
+| 单篇摘要入队 | `[x]` `POST /papers/{id}/summarize` |
 | MinerU / 嵌入并发限制（M4 24G） | `[x]` `MINERU_PARSE_CONCURRENCY`、`INDEX_EMBED_CONCURRENCY`、`TASK_WORKER_CONCURRENCY` |
 | 独立 Worker 进程 / API 与慢任务分离 | `[x]` `TASK_WORKER_MODE=external` + `scripts/run_task_worker.py`；`pnpm run dev:external` |
 

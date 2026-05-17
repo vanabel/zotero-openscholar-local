@@ -15,11 +15,15 @@
 |------|------|------|
 | POST | `/scan` | 扫描 Zotero storage（增量） |
 | POST | `/papers/sync-zotero-metadata` | 从 `zotero.sqlite` 同步题录 |
-| GET | `/papers` | 列表；`q=` 搜索；`parse_quality_lte` / `gte` / `missing`；`sort=` |
+| GET | `/papers` | 列表；`q=` 搜索；`parse_quality_lte` / `gte` / `missing`；`sort=`；含 `has_paper_summary` |
 | GET | `/papers/quality-summary` | 全库解析质量分布 |
+| GET | `/papers/{id}` | 单篇元数据 |
 | GET | `/papers/{id}/parse-report` | 单篇解析报告（无则 404） |
+| GET | `/papers/{id}/parse-meta` | `parsed/{id}/meta.json`（MinerU 模式等） |
 | GET | `/papers/{id}/document` | Markdown 预览 |
 | GET | `/papers/{id}/chunks` | 分块预览 |
+| GET | `/papers/{id}/summary` | AI 摘要（`paper_summary`；无则 404） |
+| POST | `/papers/{id}/summarize` | 单篇入队摘要；默认 **202** + `task_id`；`wait=true` 同步 |
 
 ## 索引
 
@@ -34,13 +38,21 @@
 | POST | `/papers/summarize-missing` | 为已 indexed 且无 `paper_summary` 文献入队摘要（需 LLM） |
 | POST | `/papers/rescore-unscored` | 未评分且有 `document.md`：仅补 `parse_quality_score`（不跑 MinerU） |
 | POST | `/papers/{id}/rescore-parse-quality` | 单篇补解析质量分 |
+| POST | `/papers/sync-lance-indexed` | 将已有 `scholar_embedding_json` 写入 LanceDB（不重新分块/嵌入）；body 可选 `paper_ids` / `limit` |
+| POST | `/papers/{id}/sync-lance` | 单篇同步 Lance |
 
 ## 任务
 
+`task_type`：`index`（解析+分块+嵌入）| `summarize`（生成 `paper_summary`）。  
+`status`：`queued` | `running` | `completed` | `failed` | `cancelled`。
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/tasks/active` | 进行中任务 |
+| GET | `/tasks/active` | 进行中任务；可选 `paper_ids=` 逗号分隔 |
 | GET | `/tasks/active/stream` | SSE：任务进度与状态推送 |
+| GET | `/tasks/stats` | 全表任务统计（按 status / task_type）；`failed_limit=` 最近失败样本 |
+| POST | `/tasks/cancel-queued` | 取消全部 `queued`（不中断 `running`）；恢复卡在 `indexing` 的文献状态 |
+| POST | `/tasks/cancel-orphans` | 清理指向已删/不存在文献的 `queued`/`running` 任务 |
 | GET | `/tasks/{id}` | 状态与 `progress_json` |
 
 ## 问答

@@ -13,6 +13,14 @@ _worker_task: asyncio.Task | None = None
 _queue: asyncio.Queue[str] = asyncio.Queue()
 ACTIVE_STATUSES = ("queued", "running")
 
+_ORPHAN_PENDING_WHERE = """
+    t.status IN ('queued', 'running')
+    AND t.paper_id IS NOT NULL
+    AND NOT EXISTS (
+        SELECT 1 FROM papers p WHERE p.id = t.paper_id AND p.deleted = 0
+    )
+"""
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -107,6 +115,183 @@ def task_to_api(row: dict) -> dict:
 def get_task(task_id: str) -> dict | None:
     row = _task_row(task_id)
     return task_to_api(row) if row else None
+
+
+def get_task_stats(*, failed_limit: int = 10) -> dict:
+    """全表任务统计（按状态 / 类型），供管理面板展示。"""
+    failed_limit = max(0, min(int(failed_limit), 50))
+    with get_db() as conn:
+        total = conn.execute("SELECT COUNT(*) AS c FROM tasks").fetchone()["c"]
+        pending = conn.execute(
+            "SELECT COUNT(*) AS c FROM tasks WHERE status IN ('queued', 'running')"
+        ).fetchone()["c"]
+        by_status = [
+            {"status": r["status"], "count": r["c"]}
+            for r in conn.execute(
+                "SELECT status, COUNT(*) AS c FROM tasks GROUP BY status ORDER BY c DESC, status"
+            ).fetchall()
+        ]
+        by_type = [
+            {"task_type": r["task_type"], "count": r["c"]}
+            for r in conn.execute(
+                "SELECT task_type, COUNT(*) AS c FROM tasks GROUP BY task_type ORDER BY c DESC, task_type"
+            ).fetchall()
+        ]
+        by_type_status = [
+            {
+                "task_type": r["task_type"],
+                "status": r["status"],
+                "count": r["c"],
+            }
+            for r in conn.execute(
+                """
+                SELECT task_type, status, COUNT(*) AS c
+                FROM tasks
+                GROUP BY task_type, status
+                ORDER BY task_type, status
+                """
+            ).fetchall()
+        ]
+        pr = conn.execute(
+            """
+            SELECT MIN(created_at) AS oldest, MAX(created_at) AS newest
+            FROM tasks
+            WHERE status IN ('queued', 'running')
+            """
+        ).fetchone()
+        orphan_pending = conn.execute(
+            f"SELECT COUNT(*) AS c FROM tasks t WHERE {_ORPHAN_PENDING_WHERE}"
+        ).fetchone()["c"]
+        failed_rows = []
+        if failed_limit:
+            failed_rows = conn.execute(
+                """
+                SELECT id, task_type, paper_id, error, updated_at
+                FROM tasks
+                WHERE status = 'failed'
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (failed_limit,),
+            ).fetchall()
+    return {
+        "total": total,
+        "pending": pending,
+        "worker_concurrency": max(1, int(settings.task_worker_concurrency)),
+        "by_status": by_status,
+        "by_type": by_type,
+        "by_type_status": by_type_status,
+        "pending_range": (
+            {"oldest": pr["oldest"], "newest": pr["newest"]}
+            if pending and pr and pr["oldest"]
+            else None
+        ),
+        "orphan_pending": orphan_pending,
+        "failed_samples": [
+            {
+                "id": r["id"],
+                "task_type": r["task_type"],
+                "paper_id": r["paper_id"],
+                "error": (r["error"] or "")[:500],
+                "updated_at": r["updated_at"],
+            }
+            for r in failed_rows
+        ],
+    }
+
+
+def _revert_paper_indexing_if_idle(conn, paper_id: str, now: str) -> bool:
+    """取消索引排队后，若文献无其它活动 index 任务且仍为 indexing，则恢复 index_status。"""
+    row = conn.execute(
+        "SELECT index_status FROM papers WHERE id = ? AND deleted = 0",
+        (paper_id,),
+    ).fetchone()
+    if not row or row["index_status"] != "indexing":
+        return False
+    active = conn.execute(
+        """
+        SELECT 1 FROM tasks
+        WHERE paper_id = ? AND task_type = 'index' AND status IN ('queued', 'running')
+        LIMIT 1
+        """,
+        (paper_id,),
+    ).fetchone()
+    if active:
+        return False
+    has_chunks = conn.execute(
+        "SELECT 1 FROM chunks WHERE paper_id = ? LIMIT 1",
+        (paper_id,),
+    ).fetchone()
+    new_status = "indexed" if has_chunks else "pending"
+    conn.execute(
+        """
+        UPDATE papers SET index_status = ?, status_message = NULL, updated_at = ?
+        WHERE id = ? AND deleted = 0
+        """,
+        (new_status, now, paper_id),
+    )
+    return True
+
+
+def cancel_all_queued_tasks() -> dict:
+    """将 status=queued 的任务标为 cancelled，并恢复仍卡在 indexing 的文献状态。"""
+    now = _utc_now()
+    reason = "用户取消排队"
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, paper_id, task_type FROM tasks WHERE status = 'queued'"
+        ).fetchall()
+        if not rows:
+            return {"cancelled": 0, "papers_reverted": 0}
+        conn.execute(
+            "UPDATE tasks SET status = 'cancelled', error = ?, updated_at = ? WHERE status = 'queued'",
+            (reason, now),
+        )
+        papers_reverted = 0
+        for pid in {r["paper_id"] for r in rows if r["task_type"] == "index" and r["paper_id"]}:
+            if _revert_paper_indexing_if_idle(conn, pid, now):
+                papers_reverted += 1
+    for row in rows:
+        _publish_task_status(row["id"], status="cancelled", error=reason)
+    plog_info("task", "取消排队 %s 条，恢复文献状态 %s 篇", len(rows), papers_reverted)
+    return {"cancelled": len(rows), "papers_reverted": papers_reverted}
+
+
+def cancel_orphan_pending_tasks() -> dict:
+    """清理指向不存在/已删文献的 queued/running 任务。"""
+    now = _utc_now()
+    reason = "文献不存在或已删除，已清理"
+    with get_db() as conn:
+        rows = conn.execute(
+            f"SELECT id, status FROM tasks t WHERE {_ORPHAN_PENDING_WHERE}"
+        ).fetchall()
+        if not rows:
+            return {"cancelled": 0, "failed": 0}
+        conn.execute(
+            f"""
+            UPDATE tasks SET status = 'cancelled', error = ?, updated_at = ?
+            WHERE status = 'queued' AND id IN (
+                SELECT t.id FROM tasks t WHERE {_ORPHAN_PENDING_WHERE} AND t.status = 'queued'
+            )
+            """,
+            (reason, now),
+        )
+        conn.execute(
+            f"""
+            UPDATE tasks SET status = 'failed', error = ?, updated_at = ?
+            WHERE status = 'running' AND id IN (
+                SELECT t.id FROM tasks t WHERE {_ORPHAN_PENDING_WHERE} AND t.status = 'running'
+            )
+            """,
+            (reason, now),
+        )
+    cancelled = sum(1 for r in rows if r["status"] == "queued")
+    failed = sum(1 for r in rows if r["status"] == "running")
+    for row in rows:
+        st = "cancelled" if row["status"] == "queued" else "failed"
+        _publish_task_status(row["id"], status=st, error=reason)
+    plog_info("task", "清理孤儿任务 cancelled=%s failed=%s", cancelled, failed)
+    return {"cancelled": cancelled, "failed": failed}
 
 
 def list_active_tasks(*, paper_ids: list[str] | None = None) -> list[dict]:
@@ -405,7 +590,13 @@ def _publish_task_status(task_id: str, *, status: str, error: str | None = None)
 
 async def _dispatch_task(task_id: str) -> None:
     row = _task_row(task_id)
-    if row and row.get("task_type") == "summarize":
+    if not row:
+        return
+    if row["status"] == "cancelled":
+        return
+    if row["status"] not in ACTIVE_STATUSES:
+        return
+    if row.get("task_type") == "summarize":
         await _run_summarize_task(task_id)
     else:
         await _run_index_task(task_id)

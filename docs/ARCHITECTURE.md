@@ -42,8 +42,8 @@ Markdown 也不是最终知识库；
 
 | 路径 | 职责 |
 |------|------|
-| `apps/web` | Next.js 14：文献库、问答、综述、设置 |
-| `apps/api` | FastAPI、SQLite（`papers` / `chunks` / FTS5）、任务队列 |
+| `apps/web` | Next.js 14：文献库（预览、任务面板、AI 摘要）、问答、综述、设置 |
+| `apps/api` | FastAPI、SQLite（`papers` / `chunks` / `summaries` / FTS5）、嵌入式或独立任务 Worker |
 | `scripts/dev-mineru-api.sh` | 开发时可选本机 mineru-api（`MINERU_MODE=cli`） |
 | `DATA_DIR` | `app.sqlite`、`parsed/{paper_id}/document.md`、缓存 |
 
@@ -62,12 +62,33 @@ Markdown 也不是最终知识库；
    分块 + embedding_json [+ scholar_embedding_json]
         ▼
    chunks + chunks_fts
+        │  summarize 任务（可选）
+        ▼
+   summaries.paper_summary（文献库展示 + 综述检索优先层）
 ```
+
+## 任务队列（简图）
+
+```text
+POST /papers/{id}/index | summarize-missing | …
+        ▼
+   tasks 表 (queued) ──► asyncio Queue ──► Worker (TASK_WORKER_CONCURRENCY)
+        │                      │
+        │                      ├── index → index_paper
+        │                      └── summarize → generate_paper_summary
+        ▼
+   GET /tasks/stats · POST /tasks/cancel-queued | cancel-orphans
+        ▼
+   文献库：SSE /tasks/active/stream + TaskStatsPanel
+```
+
+重启 API 时：`queued` / `running` 重新入队；`cancelled` 任务在 Worker 取出后跳过。
 
 ## 检索流水线（简图）
 
 ```text
-用户问题 →（可选双语扩展）→ FTS 召回
+用户问题 →（可选）summaries 关键词命中（伪 chunk 上下文）
+        →（可选双语扩展）→ FTS 召回
         →（可选）OpenScholar Retriever 稠密召回
         → RRF 融合 → 跨篇配额 → Reranker / Ollama 余弦
         → 引用式 prompt [1][2] → LLM → CitationVerifier / claims

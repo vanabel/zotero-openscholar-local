@@ -43,6 +43,8 @@ cd apps/api && DATA_DIR=./data-test .venv/bin/pytest
 
 回归：`tests/test_data_dir_isolation.py`、`tests/test_p0_regression.py`（见 [QUALITY_BASELINE.md](./QUALITY_BASELINE.md)）。
 
+任务与摘要相关：`tests/test_task_queue.py`、`tests/test_task_stats.py`、`tests/test_paper_summary_route.py`、`tests/test_paper_batch.py`。
+
 ## CI
 
 推送 `main` / `master` 时 `.github/workflows/ci.yml` 运行默认 pytest。

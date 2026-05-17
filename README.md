@@ -15,9 +15,10 @@
 | Zotero PDF 扫描 | 递归 `storage`，`sha256` / `mtime` 增量；删除标记 `deleted` |
 | 解析 | MinerU 3.x（CLI / `mineru-api` / **cloud**）或 **pypdf** 降级 |
 | 索引 | 分块、质量分、嵌入；可选 OpenScholar 稠密向量；**202 异步** + 任务进度 |
-| 检索 | FTS + RRF + Reranker；标签/集合/年份范围；排除 `references` chunk |
+| 摘要 | 已索引文献生成 `paper_summary`（后台 `summarize` 任务）；文献库展开可读 |
+| 检索 | FTS + RRF + Reranker；标签/集合/年份范围；排除 `references` chunk；综述优先 summary |
 | 问答 / 综述 | 流式、`[n]` 引用、论断核验；申请书模板；Markdown / DOCX 导出 |
-| 前端 | Next.js 14：文献库（质量筛选、批量索引）、问答、综述、设置 |
+| 前端 | Next.js 14：文献库（质量筛选、批量索引、**任务队列概览**、AI 摘要）、问答、综述、设置 |
 
 路线图：[docs/ROADMAP.md](./docs/ROADMAP.md)
 
@@ -45,7 +46,10 @@ pnpm dev          # :8000 API + :3000 Web；cloud 模式不启本机 mineru-api
 1. **设置** — 确认 Zotero PDF 目录（默认 `~/Zotero/storage`）。
 2. **文献库 → 扫描磁盘** — 导入 PDF 列表。
 3. **批量建立索引**（或单篇）；已有 `document.md` 可用「仅重建索引」。
-4. **问答 / 综述** — `[1][2]` 对应引用卡片。
+4. （可选）**摘要缺失** 或单篇 **生成摘要** — 展开详情查看 AI 摘要。
+5. **问答 / 综述** — `[1][2]` 对应引用卡片。
+
+积压过多时：文献库 **任务队列概览** → **取消全部排队** / **清理孤儿任务**。
 
 ```bash
 pnpm test                    # 默认 pytest（隔离临时 DATA_DIR）

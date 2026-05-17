@@ -54,6 +54,23 @@ cp apps/web/.env.example apps/web/.env.local   # 可选
 pnpm run download:mineru-models   # 或 mineru-models-download
 ```
 
+## 任务 Worker
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `TASK_WORKER_MODE` | `embedded` | `embedded`：API 进程内消费队列；`external`：仅入队，另开 Worker |
+| `TASK_WORKER_CONCURRENCY` | `1` | 同时执行的任务数（1–4）；摘要与索引共用同一队列 |
+
+`external` 时：
+
+```bash
+# apps/api/.env
+TASK_WORKER_MODE=external
+pnpm run dev:external   # 或 API + pnpm run dev:worker
+```
+
+文献库 **任务队列概览** 可取消全部 `queued`、清理指向已删文献的孤儿任务（见 [API.md](./API.md)）。
+
 ## 数据库维护
 
 | 变量 | 默认 | 说明 |
@@ -71,7 +88,7 @@ pnpm run download:mineru-models   # 或 mineru-models-download
 | `1` | 各阶段简要 |
 | `2` | 含检索词、上下文预览 |
 
-`LOG_STAGES`：`retrieve,embed,rag,llm,review,scan,index,parse,translate,cache,db`（留空 = 全部）。
+`LOG_STAGES`：`retrieve,embed,rag,llm,review,scan,index,parse,translate,cache,db,task,summary`（留空 = 全部）。
 
 ## 主对话模型（OpenScholar-8B）
 

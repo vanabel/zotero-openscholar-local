@@ -4,7 +4,7 @@
 
 | 路径 | 内容 |
 |------|------|
-| `app.sqlite` | 文献、chunks、FTS、缓存、任务 |
+| `app.sqlite` | 文献、chunks、FTS、`summaries`、缓存、`tasks` |
 | `parsed/{paper_id}/` | `document.md`、MinerU 产物、`meta.json` |
 
 `paper_id` = PDF **绝对路径** 的 SHA256 前 32 位；路径不变则 ID 不变。
@@ -14,9 +14,21 @@
 1. **设置** — 确认 `ZOTERO_STORAGE_PATH`（默认 `~/Zotero/storage`）。
 2. **文献库 → 扫描磁盘** — 写入/更新 `papers` 表。
 3. **建立索引** — MinerU / cloud / pypdf → 分块与嵌入。
-4. **问答 / 综述** — 正文 `[n]` 对应引用卡片。
+4. （可选）**摘要缺失** 或单篇 **生成摘要** — 需 LLM（Ollama 等）；展开详情阅读 AI 摘要。
+5. **问答 / 综述** — 正文 `[n]` 对应引用卡片。
 
 已有 `parsed/.../document.md` 时可用 **仅重建索引**（`reindex_only`），跳过 MinerU。
+
+## 任务队列运维
+
+| 现象 | 处理 |
+|------|------|
+| 启动日志 `恢复 N 个未完成任务`，N 很大 | 多为批量入队后中断；文献库 → **任务队列概览** → **取消全部排队**（仅 `queued`，不中断正在跑的 1 条） |
+| 待处理任务指向已删文献 | **清理孤儿任务**（`POST /tasks/cancel-orphans`） |
+| 取消后 Worker 仍短暂占用 CPU | 内存队列中已入队的 id 会被取出但立即跳过（`status=cancelled`） |
+| 文献长期显示 `indexing` 却无任务 | 取消排队时会尝试将无其它 index 任务的文献恢复为 `pending` 或 `indexed`（已有 chunks） |
+
+统计：`GET /tasks/stats`（按 `status` / `task_type` 聚合）。详见 [API.md](./API.md)。
 
 ## SQLite 自动压缩（VACUUM）
 

@@ -173,6 +173,25 @@ def rescore_unscored(body: RescoreParseBody = RescoreParseBody()):
     return rescore_batch(ids)
 
 
+@router.post("/sync-lance-indexed")
+def sync_lance_indexed(body: RescoreParseBody = RescoreParseBody()):
+    """
+    将 SQLite 中已有的 scholar_embedding_json 同步到 LanceDB。
+    不重新解析 PDF、不重新分块/嵌入；适合「建立索引」提示复用跳过时补写 Lance。
+    """
+    from app.services.lance_store import backfill_lance_batch, list_paper_ids_with_scholar_embeddings
+
+    if body.paper_ids:
+        ids = list(dict.fromkeys(body.paper_ids))
+        if body.limit is not None:
+            ids = ids[: body.limit]
+    else:
+        ids = list_paper_ids_with_scholar_embeddings(limit=body.limit)
+    if not ids:
+        return {"ok": True, "matched": 0, "synced": 0, "rows": 0, "failed": 0}
+    return backfill_lance_batch(ids)
+
+
 @router.post("/summarize-missing")
 async def summarize_missing(body: MissingBatchQuery = MissingBatchQuery()):
     """为已 indexed 但尚无 paper_summary 的文献批量入队摘要生成。"""
@@ -274,6 +293,59 @@ def get_parse_meta(paper_id: str):
     return {"paper_id": paper_id, "meta": meta}
 
 
+@router.get("/{paper_id}/summary")
+def get_paper_summary_route(paper_id: str):
+    """返回已生成的 paper_summary（供文献库展示）。"""
+    from app.services.summaries import get_paper_summary
+    from app.services.zotero_scanner import get_paper
+
+    if not get_paper(paper_id):
+        raise HTTPException(status_code=404, detail="未找到文献")
+    row = get_paper_summary(paper_id, "paper_summary")
+    if not row:
+        raise HTTPException(status_code=404, detail="尚无摘要，请先建立索引并生成摘要")
+    return {
+        "paper_id": paper_id,
+        "id": row["id"],
+        "summary_type": row["summary_type"],
+        "content": row["content"],
+        "model": row.get("model"),
+        "created_at": row["created_at"],
+    }
+
+
+@router.post("/{paper_id}/summarize")
+async def summarize_one(
+    paper_id: str,
+    lang: str = Query("zh", pattern="^(zh|en)$"),
+    wait: bool = Query(False, description="为 true 时同步等待完成（脚本/调试）"),
+):
+    from app.services.paper_summary import generate_paper_summary
+    from app.services.task_queue import enqueue_summarize_task
+    from app.services.zotero_scanner import get_paper
+
+    if not get_paper(paper_id):
+        raise HTTPException(status_code=404, detail="未找到文献")
+    if wait:
+        res = await generate_paper_summary(paper_id, lang=lang)
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("error", "摘要生成失败"))
+        return res
+    info = enqueue_summarize_task(paper_id, lang=lang)
+    if info.get("error"):
+        raise HTTPException(status_code=400, detail=info["error"])
+    return JSONResponse(
+        status_code=202,
+        content={
+            "ok": True,
+            "task_id": info["task_id"],
+            "status": info["status"],
+            "deduped": info.get("deduped", False),
+            "paper_id": paper_id,
+        },
+    )
+
+
 @router.get("/{paper_id}/parse-report")
 def get_parse_report(paper_id: str):
     from app.services.parse_quality import latest_parse_report
@@ -339,6 +411,20 @@ def rescore_one_parse_quality(paper_id: str):
     res = rescore_paper_parse_quality(paper_id)
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error", "补评分失败"))
+    return res
+
+
+@router.post("/{paper_id}/sync-lance")
+def sync_lance_one(paper_id: str):
+    """单篇：从 SQLite 同步 scholar 向量到 LanceDB。"""
+    from app.services.lance_store import backfill_paper_vectors_from_db
+    from app.services.zotero_scanner import get_paper
+
+    if not get_paper(paper_id):
+        raise HTTPException(status_code=404, detail="未找到文献")
+    res = backfill_paper_vectors_from_db(paper_id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error", "同步失败"))
     return res
 
 

@@ -178,6 +178,23 @@ def _reconcile_paper_status_with_disk(conn, items: list[dict]) -> None:
     reconcile_papers_with_disk(conn, items)
 
 
+def _attach_paper_summary_flags(conn, items: list[dict]) -> None:
+    if not items:
+        return
+    ids = [i["id"] for i in items]
+    placeholders = ",".join("?" * len(ids))
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT paper_id FROM summaries
+        WHERE summary_type = 'paper_summary' AND paper_id IN ({placeholders})
+        """,
+        ids,
+    ).fetchall()
+    has = {r["paper_id"] for r in rows}
+    for item in items:
+        item["has_paper_summary"] = item["id"] in has
+
+
 def list_papers(
     limit: int = 500,
     offset: int = 0,
@@ -206,6 +223,7 @@ def list_papers(
         rows = conn.execute(sql, (*params, limit, offset)).fetchall()
         items = [dict(r) for r in rows]
         _reconcile_paper_status_with_disk(conn, items)
+        _attach_paper_summary_flags(conn, items)
         return items
 
 

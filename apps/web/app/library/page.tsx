@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { TaskStatsPanel } from "@/components/TaskStatsPanel";
 import { apiGet, apiPost, API_BASE, subscribeActiveTasks, type TaskStreamEvent } from "@/lib/api";
 
 const LOW_QUALITY_THRESHOLD = 0.65;
@@ -21,8 +22,16 @@ type Paper = {
   index_status: string;
   status_message?: string | null;
   parse_quality_score?: number | null;
+  has_paper_summary?: boolean;
   sha256: string;
   deleted: number;
+};
+
+type PaperSummaryPreview = {
+  paper_id: string;
+  content: string;
+  model?: string | null;
+  created_at?: string;
 };
 
 type QualityFilter = "all" | "low" | "unscored" | "high";
@@ -107,6 +116,18 @@ function qualityTone(score: number | null | undefined): {
     return { label: formatQualityScore(score), className: "bg-amber-50 text-amber-900" };
   }
   return { label: formatQualityScore(score), className: "bg-red-50 text-red-800" };
+}
+
+function SummaryBadge({ has }: { has: boolean | undefined }) {
+  if (!has) return null;
+  return (
+    <span
+      className="inline-flex items-center rounded-md bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-900"
+      title="已生成 AI 摘要（展开详情可阅读）"
+    >
+      已有摘要
+    </span>
+  );
 }
 
 function ParseQualityBadge({ score }: { score: number | null | undefined }) {
@@ -238,6 +259,8 @@ export default function LibraryPage() {
   const [previewChunks, setPreviewChunks] = useState<ChunkPreviewRow[]>([]);
   const [previewReport, setPreviewReport] = useState<ParseReport | null>(null);
   const [previewParseMeta, setPreviewParseMeta] = useState<ParseMetaResponse | null>(null);
+  const [previewSummary, setPreviewSummary] = useState<PaperSummaryPreview | null>(null);
+  const [previewSummaryMissing, setPreviewSummaryMissing] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [paperTasks, setPaperTasks] = useState<Map<string, IndexTaskRow>>(new Map());
   const [taskPolling, setTaskPolling] = useState(false);
@@ -303,6 +326,40 @@ export default function LibraryPage() {
     }
   }, [refresh]);
 
+  const loadPreview = useCallback(async (id: string) => {
+    setPreviewLoading(true);
+    setPreviewDoc(null);
+    setPreviewChunks([]);
+    setPreviewReport(null);
+    setPreviewParseMeta(null);
+    setPreviewSummary(null);
+    setPreviewSummaryMissing(false);
+    try {
+      const [doc, chunks, report, parseMeta, summaryRes] = await Promise.all([
+        apiGet<DocumentPreview>(`/papers/${encodeURIComponent(id)}/document?max_chars=8000`),
+        apiGet<{ items: ChunkPreviewRow[] }>(`/papers/${encodeURIComponent(id)}/chunks?limit=12`),
+        apiGet<ParseReport>(`/papers/${encodeURIComponent(id)}/parse-report`).catch(() => null),
+        apiGet<ParseMetaResponse>(`/papers/${encodeURIComponent(id)}/parse-meta`).catch(() => null),
+        apiGet<PaperSummaryPreview>(`/papers/${encodeURIComponent(id)}/summary`).catch(() => null),
+      ]);
+      setPreviewDoc(doc);
+      setPreviewChunks(chunks.items ?? []);
+      setPreviewReport(report);
+      setPreviewParseMeta(parseMeta);
+      if (summaryRes?.content) {
+        setPreviewSummary(summaryRes);
+        setPreviewSummaryMissing(false);
+      } else {
+        setPreviewSummary(null);
+        setPreviewSummaryMissing(true);
+      }
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "预览加载失败");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void syncActiveTasks().then((active) => {
       if (active) setTaskPolling(true);
@@ -352,10 +409,18 @@ export default function LibraryPage() {
       });
       if (ev.type === "task_status" && ev.status !== "queued" && ev.status !== "running") {
         void syncActiveTasks();
+        if (
+          ev.status === "completed" &&
+          ev.task_type === "summarize" &&
+          expandedId &&
+          pid === expandedId
+        ) {
+          void loadPreview(expandedId);
+        }
       }
     });
     return close;
-  }, [taskPolling, refresh, syncActiveTasks]);
+  }, [taskPolling, refresh, syncActiveTasks, expandedId, loadPreview]);
 
   const allSelected = useMemo(
     () => items.length > 0 && items.every((p) => selected.has(p.id)),
@@ -399,27 +464,69 @@ export default function LibraryPage() {
     }
   }
 
-  async function loadPreview(id: string) {
-    setPreviewLoading(true);
-    setPreviewDoc(null);
-    setPreviewChunks([]);
-    setPreviewReport(null);
-    setPreviewParseMeta(null);
+  async function summarizePaper(id: string) {
+    setMsg(`提交摘要 ${id.slice(0, 8)}…`);
     try {
-      const [doc, chunks, report, parseMeta] = await Promise.all([
-        apiGet<DocumentPreview>(`/papers/${encodeURIComponent(id)}/document?max_chars=8000`),
-        apiGet<{ items: ChunkPreviewRow[] }>(`/papers/${encodeURIComponent(id)}/chunks?limit=12`),
-        apiGet<ParseReport>(`/papers/${encodeURIComponent(id)}/parse-report`).catch(() => null),
-        apiGet<ParseMetaResponse>(`/papers/${encodeURIComponent(id)}/parse-meta`).catch(() => null),
-      ]);
-      setPreviewDoc(doc);
-      setPreviewChunks(chunks.items ?? []);
-      setPreviewReport(report);
-      setPreviewParseMeta(parseMeta);
+      const res = await apiPost<{
+        task_id?: string;
+        deduped?: boolean;
+        error?: string;
+      }>(`/papers/${id}/summarize?lang=zh`, {});
+      setTaskPolling(true);
+      setMsg(
+        res.deduped
+          ? `该文献已在摘要队列中（task ${res.task_id?.slice(0, 8) ?? ""}）。`
+          : "已加入摘要队列，完成后请刷新详情。",
+      );
+      await syncActiveTasks();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "预览加载失败");
+      setMsg(e instanceof Error ? e.message : "提交摘要失败");
+    }
+  }
+
+  async function syncLancePaper(id: string) {
+    setMsg(`同步 Lance ${id.slice(0, 8)}…`);
+    try {
+      const res = await apiPost<{ rows?: number; error?: string }>(
+        `/papers/${encodeURIComponent(id)}/sync-lance`,
+        {},
+      );
+      setMsg(`已同步 Lance：${res.rows ?? 0} 条向量（无需重新分块/嵌入）。`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "同步 Lance 失败");
+    }
+  }
+
+  async function syncLanceIndexed() {
+    setBatchBusy(true);
+    try {
+      const body =
+        selected.size > 0
+          ? { paper_ids: [...selected] }
+          : { limit: 10_000 };
+      const res = await apiPost<{
+        matched?: number;
+        synced?: number;
+        rows?: number;
+        failed?: number;
+        errors?: { paper_id?: string; error?: string }[];
+      }>("/papers/sync-lance-indexed", body);
+      const errHint =
+        (res.failed ?? 0) > 0 && res.errors?.length
+          ? `；失败 ${res.failed} 篇（例：${res.errors[0].error}）`
+          : (res.failed ?? 0) > 0
+            ? `；失败 ${res.failed} 篇`
+            : "";
+      setMsg(
+        selected.size > 0
+          ? `已选文献同步 Lance：${res.synced ?? 0}/${res.matched ?? 0} 篇，共 ${res.rows ?? 0} 条向量${errHint}。`
+          : `全库同步 Lance：${res.synced ?? 0}/${res.matched ?? 0} 篇，共 ${res.rows ?? 0} 条向量${errHint}。`,
+      );
+      setSelected(new Set());
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "批量同步 Lance 失败");
     } finally {
-      setPreviewLoading(false);
+      setBatchBusy(false);
     }
   }
 
@@ -582,6 +689,13 @@ export default function LibraryPage() {
         {Math.round(LOW_QUALITY_THRESHOLD * 100)}%）或未评分文献。
         <strong className="ml-1">批量：</strong>勾选后点「批量 MinerU 索引」。
       </p>
+      <TaskStatsPanel
+        autoRefresh={taskPolling}
+        onQueueChanged={() => {
+          void refresh();
+          void syncActiveTasks();
+        }}
+      />
       {qualitySummary && !loading && (
         <div className="flex flex-wrap gap-2 text-xs text-ink-700">
           <span className="rounded-md bg-mist-100 px-2 py-1">全库 {qualitySummary.total} 篇</span>
@@ -653,6 +767,15 @@ export default function LibraryPage() {
             title="已有 document.md 的未评分文献：仅统计质量分，不跑 MinerU"
           >
             未评分补分
+          </button>
+          <button
+            type="button"
+            disabled={batchBusy}
+            onClick={() => void syncLanceIndexed()}
+            className="rounded-lg border border-violet-200 px-3 py-2 text-sm text-violet-900 hover:bg-violet-50 disabled:opacity-50"
+            title="从 SQLite 的 scholar 向量写入 LanceDB；不重新解析/分块。已 indexed 且日志出现「复用已有分块」时用此按钮"
+          >
+            同步 Lance{selected.size > 0 ? `（${selected.size}）` : ""}
           </button>
         </div>
       </div>
@@ -795,6 +918,7 @@ export default function LibraryPage() {
                         <StatusBadge label="解析" value={p.parse_status} />
                         <StatusBadge label="索引" value={indexValue} hint={indexHint} />
                         <ParseQualityBadge score={p.parse_quality_score} />
+                        <SummaryBadge has={p.has_paper_summary} />
                         <button
                           type="button"
                           onClick={() => {
@@ -804,6 +928,8 @@ export default function LibraryPage() {
                               setPreviewChunks([]);
                               setPreviewReport(null);
                               setPreviewParseMeta(null);
+                              setPreviewSummary(null);
+                              setPreviewSummaryMissing(false);
                             } else {
                               setExpandedId(p.id);
                               void loadPreview(p.id);
@@ -840,9 +966,33 @@ export default function LibraryPage() {
                           ) : null}
                           </div>
                           {previewLoading ? (
-                            <p className="text-xs text-ink-600">加载解析报告 / document.md / chunks…</p>
+                            <p className="text-xs text-ink-600">加载摘要 / 解析报告 / document.md / chunks…</p>
                           ) : (
                             <>
+                          {previewSummary ? (
+                            <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 text-sm text-ink-900">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-violet-950">AI 摘要</span>
+                                {previewSummary.model ? (
+                                  <span className="text-[10px] text-ink-500">模型 {previewSummary.model}</span>
+                                ) : null}
+                                {previewSummary.created_at ? (
+                                  <span className="text-[10px] text-ink-500">
+                                    {new Date(previewSummary.created_at).toLocaleString("zh-CN", {
+                                      hour12: false,
+                                    })}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="mt-2 whitespace-pre-wrap leading-relaxed text-[13px]">
+                                {previewSummary.content}
+                              </p>
+                            </div>
+                          ) : previewSummaryMissing && p.index_status === "indexed" ? (
+                            <p className="text-xs text-ink-600 rounded-lg border border-dashed border-mist-300 px-3 py-2">
+                              尚无 AI 摘要。可点击下方「生成摘要」或由后台「摘要缺失」批量入队。
+                            </p>
+                          ) : null}
                           {previewParseMeta?.meta ? (
                             <div className="rounded-lg border border-mist-200 bg-mist-50 p-3 text-[11px] text-ink-800">
                               <p className="font-medium text-ink-900">解析元数据</p>
@@ -994,6 +1144,25 @@ export default function LibraryPage() {
                         >
                           强制重建
                         </button>
+                        {p.index_status === "indexed" && (
+                          <>
+                            <button
+                              type="button"
+                              className="rounded-md border border-violet-200 px-3 py-1.5 text-xs text-violet-900 hover:bg-violet-50"
+                              onClick={() => void syncLancePaper(p.id)}
+                              title="将 SQLite 中已有 OpenScholar 向量写入 LanceDB，秒级完成"
+                            >
+                              同步 Lance
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-md border border-violet-200 px-3 py-1.5 text-xs text-violet-900 hover:bg-violet-50"
+                              onClick={() => void summarizePaper(p.id)}
+                            >
+                              {p.has_paper_summary || previewSummary ? "重新生成摘要" : "生成摘要"}
+                            </button>
+                          </>
+                        )}
                         {(p.index_status === "failed" || p.parse_status === "failed") && (
                           <button
                             type="button"

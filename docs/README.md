@@ -12,4 +12,4 @@
 | [OPERATIONS.md](./OPERATIONS.md) | 数据目录、备份恢复、SQLite 维护 |
 | [QUALITY_BASELINE.md](./QUALITY_BASELINE.md) | P0 回归 fixture 与 P3/P4 评测占位 |
 
-维护约定：实现功能时同步更新 **ROADMAP** 状态、`README` 功能表、`apps/api/.env.example` 与本目录相关章节。
+维护约定：实现功能时同步更新 **ROADMAP** 状态、根 **README** 功能表、`apps/api/.env.example` 与 **API.md** / **ARCHITECTURE.md** 等本目录章节。
