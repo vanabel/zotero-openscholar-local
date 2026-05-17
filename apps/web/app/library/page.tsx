@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TaskStatsPanel } from "@/components/TaskStatsPanel";
 import { apiGet, apiPost, API_BASE, subscribeActiveTasks, type TaskStreamEvent } from "@/lib/api";
+import { isTaskActive, resolveTaskKind } from "@/lib/taskKind";
 
 const LOW_QUALITY_THRESHOLD = 0.65;
 
@@ -216,6 +217,8 @@ type IndexTaskRow = {
   id: string;
   paper_id?: string | null;
   task_type?: string;
+  kind?: string;
+  payload?: { parse_only?: boolean; reindex_only?: boolean; force?: boolean } | null;
   status: string;
   progress?: { phase?: string; done?: number; total?: number; message?: string } | null;
   error?: string | null;
@@ -224,14 +227,17 @@ type IndexTaskRow = {
 function StatusBadge({ label, value, hint }: { label: string; value: string; hint?: string }) {
   const ok = value === "parsed" || value === "indexed";
   const indexing = value === "indexing";
+  const parsing = value === "parsing";
   const failed = value === "failed";
   const cls = ok
     ? "bg-emerald-50 text-emerald-800"
     : failed
       ? "bg-red-50 text-red-800"
-      : indexing
-        ? "bg-sky-50 text-sky-900"
-        : "bg-amber-50 text-amber-900";
+      : parsing
+        ? "bg-teal-50 text-teal-900"
+        : indexing
+          ? "bg-sky-50 text-sky-900"
+          : "bg-amber-50 text-amber-900";
   return (
     <span className={`inline-flex flex-wrap items-center gap-1 rounded-md px-2 py-0.5 text-xs ${cls}`}>
       <span>
@@ -401,6 +407,8 @@ export default function LibraryPage() {
           id: ev.task_id,
           paper_id: pid,
           task_type: ev.task_type ?? existing?.task_type ?? "index",
+          kind: ev.kind ?? existing?.kind,
+          payload: ev.payload ?? existing?.payload,
           status: ev.status ?? existing?.status ?? "running",
           progress: ev.progress ?? existing?.progress,
           error: err ?? existing?.error,
@@ -902,13 +910,20 @@ export default function LibraryPage() {
               const displayTitle = p.title || p.pdf_path.split("/").pop() || "未命名";
               const expanded = expandedId === p.id;
               const task = paperTasks.get(p.id);
-              const indexHint =
+              const taskKind = resolveTaskKind(task);
+              const taskActive = task ? isTaskActive(task.status) : false;
+              const isParseTask = taskActive && taskKind === "parse";
+              const isIndexTask = taskActive && (taskKind === "index" || taskKind === "reindex");
+              const progressHint =
                 task?.progress?.message ||
                 (task?.status === "queued" ? "排队中" : task?.status === "running" ? "处理中" : undefined);
+              const parseBadgeHint = isParseTask ? progressHint : undefined;
+              const indexHint = isIndexTask ? progressHint : undefined;
               const indexValue =
-                p.index_status === "indexing" || task?.status === "queued" || task?.status === "running"
-                  ? "indexing"
-                  : p.index_status;
+                p.index_status === "indexing" || isIndexTask ? "indexing" : p.index_status;
+              const parseBadgeValue = isParseTask
+                ? "parsing"
+                : p.parse_status;
               const failMsg =
                 (p.status_message && p.status_message.trim()) ||
                 (task?.status === "failed" && task.error ? task.error : null);
@@ -936,7 +951,7 @@ export default function LibraryPage() {
                       </h2>
                       <PaperMetaLines p={p} />
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        <StatusBadge label="解析" value={p.parse_status} />
+                        <StatusBadge label="解析" value={parseBadgeValue} hint={parseBadgeHint} />
                         <StatusBadge label="索引" value={indexValue} hint={indexHint} />
                         <ParseQualityBadge score={p.parse_quality_score} />
                         <SummaryBadge has={p.has_paper_summary} />

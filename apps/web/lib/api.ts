@@ -60,7 +60,9 @@ export type TaskStreamEvent =
       task_id: string;
       paper_id?: string | null;
       task_type?: string;
+      kind?: string;
       status?: string;
+      payload?: { parse_only?: boolean; reindex_only?: boolean; force?: boolean };
       progress?: { phase?: string; done?: number; total?: number; message?: string };
     }
   | {
@@ -68,8 +70,10 @@ export type TaskStreamEvent =
       task_id: string;
       paper_id?: string | null;
       task_type?: string;
+      kind?: string;
       status: string;
       error?: string | null;
+      payload?: { parse_only?: boolean; reindex_only?: boolean; force?: boolean };
       progress?: { phase?: string; done?: number; total?: number; message?: string };
     };
 

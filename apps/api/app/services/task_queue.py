@@ -48,15 +48,19 @@ class TaskProgress:
         row = _task_row(self.task_id)
         if row:
             from app.services.task_events import publish_task_event
+            from app.services.task_kind import task_kind
 
+            pl = _parse_json_field(row.get("payload_json"))
             publish_task_event(
                 {
                     "type": "task_progress",
                     "task_id": self.task_id,
                     "paper_id": row.get("paper_id"),
                     "task_type": row.get("task_type"),
+                    "kind": task_kind(task_type=row.get("task_type") or "index", payload=pl),
                     "status": row.get("status"),
                     "progress": payload,
+                    "payload": pl,
                 }
             )
 
@@ -95,12 +99,16 @@ def _parse_json_field(raw: str | None) -> dict | None:
 
 
 def task_to_api(row: dict) -> dict:
+    from app.services.task_kind import task_kind
+
     progress = _parse_json_field(row.get("progress_json"))
     payload = _parse_json_field(row.get("payload_json"))
     result = _parse_json_field(row.get("result_json"))
+    tt = row["task_type"]
     return {
         "id": row["id"],
-        "task_type": row["task_type"],
+        "task_type": tt,
+        "kind": task_kind(task_type=tt, payload=payload),
         "paper_id": row.get("paper_id"),
         "status": row["status"],
         "error": row.get("error"),
@@ -118,7 +126,9 @@ def get_task(task_id: str) -> dict | None:
 
 
 def get_task_stats(*, failed_limit: int = 10) -> dict:
-    """全表任务统计（按状态 / 类型），供管理面板展示。"""
+    """全表任务统计（按状态 / 类型 / kind），供管理面板展示。"""
+    from app.services.task_kind import task_kind
+
     failed_limit = max(0, min(int(failed_limit), 50))
     with get_db() as conn:
         total = conn.execute("SELECT COUNT(*) AS c FROM tasks").fetchone()["c"]
@@ -152,6 +162,45 @@ def get_task_stats(*, failed_limit: int = 10) -> dict:
                 """
             ).fetchall()
         ]
+        by_kind = [
+            {"kind": r["kind"], "count": r["c"]}
+            for r in conn.execute(
+                """
+                SELECT
+                  CASE
+                    WHEN task_type = 'summarize' THEN 'summarize'
+                    WHEN task_type = 'index' AND COALESCE(json_extract(payload_json, '$.parse_only'), 0) THEN 'parse'
+                    WHEN task_type = 'index' AND COALESCE(json_extract(payload_json, '$.reindex_only'), 0) THEN 'reindex'
+                    WHEN task_type = 'index' THEN 'index'
+                    ELSE task_type
+                  END AS kind,
+                  COUNT(*) AS c
+                FROM tasks
+                GROUP BY kind
+                ORDER BY c DESC, kind
+                """
+            ).fetchall()
+        ]
+        by_kind_status = [
+            {"kind": r["kind"], "status": r["status"], "count": r["c"]}
+            for r in conn.execute(
+                """
+                SELECT
+                  CASE
+                    WHEN task_type = 'summarize' THEN 'summarize'
+                    WHEN task_type = 'index' AND COALESCE(json_extract(payload_json, '$.parse_only'), 0) THEN 'parse'
+                    WHEN task_type = 'index' AND COALESCE(json_extract(payload_json, '$.reindex_only'), 0) THEN 'reindex'
+                    WHEN task_type = 'index' THEN 'index'
+                    ELSE task_type
+                  END AS kind,
+                  status,
+                  COUNT(*) AS c
+                FROM tasks
+                GROUP BY kind, status
+                ORDER BY kind, status
+                """
+            ).fetchall()
+        ]
         pr = conn.execute(
             """
             SELECT MIN(created_at) AS oldest, MAX(created_at) AS newest
@@ -166,7 +215,7 @@ def get_task_stats(*, failed_limit: int = 10) -> dict:
         if failed_limit:
             failed_rows = conn.execute(
                 """
-                SELECT id, task_type, paper_id, error, updated_at
+                SELECT id, task_type, paper_id, error, updated_at, payload_json
                 FROM tasks
                 WHERE status = 'failed'
                 ORDER BY updated_at DESC
@@ -181,6 +230,8 @@ def get_task_stats(*, failed_limit: int = 10) -> dict:
         "by_status": by_status,
         "by_type": by_type,
         "by_type_status": by_type_status,
+        "by_kind": by_kind,
+        "by_kind_status": by_kind_status,
         "pending_range": (
             {"oldest": pr["oldest"], "newest": pr["newest"]}
             if pending and pr and pr["oldest"]
@@ -191,6 +242,7 @@ def get_task_stats(*, failed_limit: int = 10) -> dict:
             {
                 "id": r["id"],
                 "task_type": r["task_type"],
+                "kind": task_kind(task_type=r["task_type"], payload_json=r["payload_json"]),
                 "paper_id": r["paper_id"],
                 "error": (r["error"] or "")[:500],
                 "updated_at": r["updated_at"],
@@ -372,10 +424,19 @@ def enqueue_index_task(
                 now,
             ),
         )
-        conn.execute(
-            "UPDATE papers SET index_status = 'indexing', updated_at = ? WHERE id = ? AND deleted = 0",
-            (now, paper_id),
-        )
+        if parse_only:
+            conn.execute(
+                """
+                UPDATE papers SET status_message = ?, updated_at = ?
+                WHERE id = ? AND deleted = 0
+                """,
+                ("解析任务排队中", now, paper_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE papers SET index_status = 'indexing', updated_at = ? WHERE id = ? AND deleted = 0",
+                (now, paper_id),
+            )
     _queue.put_nowait(task_id)
     plog_info(
         "task",
@@ -534,6 +595,7 @@ async def _run_index_task(task_id: str) -> None:
             progress=progress,
         )
         if result.get("ok"):
+            done_msg = "解析完成" if parse_only else "完成"
             with get_db() as conn:
                 conn.execute(
                     """
@@ -543,12 +605,18 @@ async def _run_index_task(task_id: str) -> None:
                     """,
                     (
                         json_dumps_safe(result),
-                        json_dumps_safe({"phase": "done", "done": 1, "total": 1, "message": "完成"}),
+                        json_dumps_safe({"phase": "done", "done": 1, "total": 1, "message": done_msg}),
                         _utc_now(),
                         task_id,
                     ),
                 )
-            plog_info("task", "完成 index task_id=%s paper_id=%s", task_id, paper_id)
+            plog_info(
+                "task",
+                "完成 index task_id=%s paper_id=%s parse_only=%s",
+                task_id,
+                paper_id,
+                parse_only,
+            )
             _publish_task_status(task_id, status="completed")
         else:
             err = result.get("error") or "索引失败"
@@ -569,8 +637,10 @@ def _fail_task(
     touch_index_status: bool = True,
 ) -> None:
     from app.services.paper_status import set_paper_status
+    from app.services.task_kind import task_kind
 
     now = _utc_now()
+    row = _task_row(task_id)
     with get_db() as conn:
         conn.execute(
             """
@@ -579,8 +649,17 @@ def _fail_task(
             """,
             (error, json_dumps_safe(result) if result else None, now, task_id),
         )
-    if touch_index_status:
-        set_paper_status(paper_id, index_status="failed", status_message=error[:2000])
+    if touch_index_status and row:
+        pl = _parse_json_field(row.get("payload_json"))
+        kind = task_kind(task_type=row.get("task_type") or "index", payload=pl)
+        if kind == "parse":
+            set_paper_status(
+                paper_id,
+                parse_status="failed",
+                status_message=error[:2000],
+            )
+        else:
+            set_paper_status(paper_id, index_status="failed", status_message=error[:2000])
 
 
 def _publish_task_status(task_id: str, *, status: str, error: str | None = None) -> None:
@@ -588,16 +667,20 @@ def _publish_task_status(task_id: str, *, status: str, error: str | None = None)
     if not row:
         return
     from app.services.task_events import publish_task_event
+    from app.services.task_kind import task_kind
 
+    pl = _parse_json_field(row.get("payload_json"))
     publish_task_event(
         {
             "type": "task_status",
             "task_id": task_id,
             "paper_id": row.get("paper_id"),
             "task_type": row.get("task_type"),
+            "kind": task_kind(task_type=row.get("task_type") or "index", payload=pl),
             "status": status,
             "error": error,
             "progress": _parse_json_field(row.get("progress_json")),
+            "payload": pl,
         }
     )
 

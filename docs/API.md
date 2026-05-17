@@ -45,6 +45,7 @@
 ## 任务
 
 `task_type`：`index`（解析+分块+嵌入）| `summarize`（生成 `paper_summary`）。  
+`index` 任务在统计与 SSE 中另有 `kind`：`parse`（仅解析）| `reindex`（仅重建索引）| `index`（完整建立索引）。  
 `status`：`queued` | `running` | `completed` | `failed` | `cancelled`。
 
 | 方法 | 路径 | 说明 |
