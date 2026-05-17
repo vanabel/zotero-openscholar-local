@@ -192,10 +192,64 @@
 
 ## P7 — 明确延后
 
-- Mano-P / Cider GUI 自动化  
-- ScholarQA 大规模评测、外部 Semantic Scholar / OpenAlex  
+- ScholarQA 大规模评测  
 - Transformers 直连 OpenScholar-8B（Ollama 够用）  
 - 多用户、shadcn 全面换皮  
+
+### Mano-P / Cider GUI 自动化
+
+**定位**（延后）：端侧 GUI-VLA（[Mano-P](https://github.com/Mininglamp-AI/Mano-P)）+ MLX 推理加速（[Cider](https://github.com/Mininglamp-AI/cider)），通过截图—推理—点击循环操作**无 API** 的桌面/Web 界面。**不替代**本库 `ZOTERO_STORAGE_PATH` + `zotero.sqlite` + MinerU/API 的主数据与索引路径。
+
+| 组件 | 职责 |
+|------|------|
+| **Mano-P** | 视觉语言动作模型；本地或云推理后驱动键鼠 |
+| **Cider** | Apple MLX 量化加速，降低端侧推理延迟 |
+| **Mano-Skill / mano-cua** | 对外入口（Agent Skill、CLI；Python SDK 仍开发中） |
+
+**难度评估**（2026-05）：
+
+| 场景 | 难度 | 说明 |
+|------|------|------|
+| 个人试用、偶发点桌面 | 中～中高 | 需 macOS 辅助功能/录屏权限；官方建议 M4 + **32GB**（本机 P6 按 **24GB** 调并发，叠 GUI-VLA 易抢内存） |
+| 稳定接入 `task_queue` / 无人值守批量 | **高** | OSWorld 专项约 58% 成功率；逐步非确定、难回归；CLI/SDK 与本地模型分阶段开源 |
+| 替代现有 Zotero/解析/检索链路 | 不推荐 | 与 P1～P5 API/文件路径重叠，可观测性与性价比均劣于现状 |
+
+**与本库关系**：文献扫描、解析、索引、问答/综述均已程序化；GUI 自动化仅在有「必须点客户端、且无 API」的具体场景时值得单独立项（如某投稿站、某桌面插件），且须接受人工兜底。
+
+**若接入时的实现约束**（待做）：
+
+| 任务 | 状态 |
+|------|------|
+| 明确 1～2 个无 API 替代方案的目标场景与验收 | `[ ]` |
+| 与 P6 并发隔离（MinerU / 嵌入 / Ollama 不同时满载） | `[ ]` |
+| 程序化调用面稳定（mano-client 或 CLI 落地后再接 Worker） | `[ ]` |
+| 失败状态机、日志与半完成回滚（勿并入主 `index` 任务） | `[ ]` |
+
+**参考**：[Mano-P README](https://github.com/Mininglamp-AI/Mano-P)、[Cider](https://github.com/Mininglamp-AI/cider)、[mano-skill](https://github.com/Mininglamp-AI/mano-skill)。
+
+### 外部元数据：Semantic Scholar / OpenAlex
+
+**定位**（延后）：补全 DOI/题录、作者与机构、引用关系、开放获取链接等；**不替代**本库解析 + LanceDB + 本地 Retriever 的主检索路径。
+
+| | **OpenAlex** | **Semantic Scholar (S2)** |
+|---|---|---|
+| API 费用 | 免费（网站、API、月度快照） | 免费公开 API（无订阅费） |
+| 数据许可 | **[CC0](https://creativecommons.org/publicdomain/zero/1.0/)**，可自由使用与再分发 | 字段/来源各异，常见 **CC BY-NC**、**ODC-BY**；第三方内容另有许可 |
+| 免费 API 限额 | **10 万次/天**，最高 **10 QPS** | 无 key：与所有未认证用户共享配额；**有 key：全端点约 1 QPS**（可申请略提高） |
+| 超额 / 大规模 | Premium / Institutional（更高限额、小时级同步） | 建议 [Datasets API](https://api.semanticscholar.org/api-docs/datasets) 本地下载，勿猛打 REST |
+| 商用 | CC0 对商用较友好 | 须核对 **BY-NC** 等；[API 协议](https://www.semanticscholar.org/product/api/license) 禁止转售/再包装 API |
+| 合规要点 | 遵守 [ToS](https://openalex.org/OpenAlex_termsofservice.pdf)；避免滥用与过高负载 | 须署名「Semantic Scholar」；遵守速率限制；API 可随时变更或终止（无商业 SLA） |
+
+**若接入时的实现约束**（待做）：
+
+| 任务 | 状态 |
+|------|------|
+| 优先 OpenAlex：元数据 / 作者 / 机构补全 | `[ ]` |
+| S2：引用、推荐、摘要等；注意 NC 许可与低 QPS | `[ ]` |
+| 客户端：速率限制、本地缓存、失败重试、来源标注 | `[ ]` |
+| 全库批量前评估配额（OpenAlex 10 万/天、S2 1 QPS 或 dataset） | `[ ]` |
+
+**参考**：[OpenAlex Pricing](https://ourresearch.gitbook.io/help.openalex.org/pricing)、[S2 API 教程](https://www.semanticscholar.org/product/api/tutorial)、[S2 API License](https://www.semanticscholar.org/product/api/license)。
 
 ---
 
