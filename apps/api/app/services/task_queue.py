@@ -336,6 +336,7 @@ def enqueue_index_task(
     *,
     force: bool = False,
     reindex_only: bool = False,
+    parse_only: bool = False,
 ) -> dict:
     paper = get_paper(paper_id)
     if not paper or paper.get("deleted"):
@@ -347,7 +348,7 @@ def enqueue_index_task(
 
     task_id = uuid.uuid4().hex
     now = _utc_now()
-    payload = {"force": force, "reindex_only": reindex_only}
+    payload = {"force": force, "reindex_only": reindex_only, "parse_only": parse_only}
     progress = {"phase": "queued", "done": 0, "total": 0, "message": "排队中"}
     with get_db() as conn:
         conn.execute(
@@ -376,7 +377,14 @@ def enqueue_index_task(
             (now, paper_id),
         )
     _queue.put_nowait(task_id)
-    plog_info("task", "入队 index task_id=%s paper_id=%s force=%s", task_id, paper_id, force)
+    plog_info(
+        "task",
+        "入队 index task_id=%s paper_id=%s force=%s parse_only=%s",
+        task_id,
+        paper_id,
+        force,
+        parse_only,
+    )
     return {"task_id": task_id, "status": "queued", "deduped": False}
 
 
@@ -385,8 +393,12 @@ def enqueue_index_batch(
     *,
     force: bool = False,
     reindex_only: bool = False,
+    parse_only: bool = False,
 ) -> list[dict]:
-    return [enqueue_index_task(pid, force=force, reindex_only=reindex_only) for pid in paper_ids]
+    return [
+        enqueue_index_task(pid, force=force, reindex_only=reindex_only, parse_only=parse_only)
+        for pid in paper_ids
+    ]
 
 
 def _find_active_summarize_task(paper_id: str) -> str | None:
@@ -504,6 +516,7 @@ async def _run_index_task(task_id: str) -> None:
     payload = _parse_json_field(row.get("payload_json")) or {}
     force = bool(payload.get("force"))
     reindex_only = bool(payload.get("reindex_only"))
+    parse_only = bool(payload.get("parse_only"))
     progress = TaskProgress(task_id)
     now = _utc_now()
     with get_db() as conn:
@@ -517,6 +530,7 @@ async def _run_index_task(task_id: str) -> None:
             paper_id,
             force=force,
             reindex_only=reindex_only,
+            parse_only=parse_only,
             progress=progress,
         )
         if result.get("ok"):

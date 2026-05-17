@@ -146,18 +146,22 @@ async def index_paper(
     force: bool = False,
     *,
     reindex_only: bool = False,
+    parse_only: bool = False,
     progress: TaskProgress | None = None,
 ) -> dict:
     t0 = time.monotonic()
     plog_info(
         "index",
-        "index_paper 开始 paper_id=%s force=%s reindex_only=%s",
+        "index_paper 开始 paper_id=%s force=%s reindex_only=%s parse_only=%s",
         paper_id,
         force,
         reindex_only,
+        parse_only,
     )
     if reindex_only and force:
         return {"ok": False, "error": "reindex_only 与 force 不能同时使用（前者仅重建分块/嵌入，不跑 MinerU）"}
+    if parse_only and reindex_only:
+        return {"ok": False, "error": "parse_only 与 reindex_only 不能同时使用"}
     paper = get_paper(paper_id)
     if not paper or paper.get("deleted"):
         err = "文献不存在或已归档"
@@ -168,14 +172,19 @@ async def index_paper(
     out_dir = _parsed_dir(paper_id)
     out_dir.mkdir(parents=True, exist_ok=True)
     if not pdf_path.exists():
-        if reindex_only and load_parsed_markdown(out_dir) is not None:
+        if not parse_only and reindex_only and load_parsed_markdown(out_dir) is not None:
             plog_info(
                 "index",
                 "PDF 不在本机路径（常见于超算仅同步 parsed/），reindex_only 且已有 Markdown，继续",
             )
         else:
             err = "PDF 文件不存在"
-            set_paper_status(paper_id, index_status="failed", status_message=err)
+            set_paper_status(
+                paper_id,
+                index_status="failed",
+                status_message=err,
+                parse_status="failed" if parse_only else None,
+            )
             return {"ok": False, "error": err}
 
     reused_parse = False
@@ -303,6 +312,45 @@ async def index_paper(
                 """,
                 (md_hash, _utc_now(), paper_id),
             )
+
+    if parse_only:
+        if not need_parse and not force:
+            plog_info("index", "parse_only 复用已有 Markdown paper_id=%s", paper_id)
+            return {
+                "ok": True,
+                "paper_id": paper_id,
+                "parse_only": True,
+                "reused_parse": True,
+                "skipped": True,
+                "markdown_hash": md_hash,
+                "elapsed_sec": round(time.monotonic() - t0, 2),
+            }
+        with get_db() as conn:
+            conn.execute(
+                """
+                UPDATE papers SET
+                  index_status = 'pending',
+                  status_message = NULL,
+                  updated_at = ?
+                WHERE id = ?
+                """,
+                (_utc_now(), paper_id),
+            )
+        plog_info(
+            "index",
+            "parse_only 完成 paper_id=%s reused_parse=%s md_chars=%s",
+            paper_id,
+            reused_parse,
+            len(md),
+        )
+        return {
+            "ok": True,
+            "paper_id": paper_id,
+            "parse_only": True,
+            "reused_parse": reused_parse,
+            "markdown_hash": md_hash,
+            "elapsed_sec": round(time.monotonic() - t0, 2),
+        }
 
     if (
         not reindex_only

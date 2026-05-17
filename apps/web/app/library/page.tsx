@@ -556,6 +556,27 @@ export default function LibraryPage() {
     }
   }
 
+  async function parsePaper(id: string, force: boolean) {
+    setMsg(`提交仅解析 ${id.slice(0, 8)}…`);
+    try {
+      const res = await apiPost<{
+        task_id?: string;
+        status?: string;
+        deduped?: boolean;
+        error?: string;
+      }>(`/papers/${id}/parse?force=${force}`, {});
+      setTaskPolling(true);
+      setMsg(
+        res.deduped
+          ? `该文献已在任务队列中（task ${res.task_id?.slice(0, 8) ?? ""}）。`
+          : `已加入后台解析队列（仅写入 parsed/，不分块、不嵌入）。`,
+      );
+      await syncActiveTasks();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "提交解析失败");
+    }
+  }
+
   async function syncZoteroMeta() {
     setMsg("正在从 zotero.sqlite 同步题录…");
     try {
@@ -746,7 +767,7 @@ export default function LibraryPage() {
             disabled={batchBusy}
             onClick={() => void enqueueMissing("/papers/parse-missing", "解析缺失")}
             className="rounded-lg border border-mist-200 px-3 py-2 text-sm hover:bg-mist-50 disabled:opacity-50"
-            title="为尚无 document.md 的文献批量入队解析"
+            title="为尚无 document.md 的文献批量入队：仅 MinerU/pypdf 解析，不写 chunks、不嵌入"
           >
             解析缺失
           </button>
@@ -1125,6 +1146,14 @@ export default function LibraryPage() {
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           type="button"
+                          className="rounded-md border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-900 hover:bg-teal-100"
+                          onClick={() => void parsePaper(p.id, false)}
+                          title="仅 PDF→document.md，供超算后续分块与嵌入"
+                        >
+                          仅解析
+                        </button>
+                        <button
+                          type="button"
                           className="rounded-md bg-accent-soft px-3 py-1.5 text-xs font-medium text-accent hover:opacity-90"
                           onClick={() => void indexPaper(p.id, false)}
                         >
@@ -1176,7 +1205,7 @@ export default function LibraryPage() {
                           <button
                             type="button"
                             className="rounded-md border border-amber-200 px-3 py-1.5 text-xs text-amber-900 hover:bg-amber-50"
-                            onClick={() => void indexPaper(p.id, true)}
+                            onClick={() => void parsePaper(p.id, true)}
                           >
                             重试解析
                           </button>

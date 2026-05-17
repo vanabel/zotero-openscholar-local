@@ -109,14 +109,15 @@ pnpm run hpc:vectors   # 本地调试：顺序执行上述三步（需 .env 配 
 | `chunk_batch.py` | 是 | 否 | 否 | `parsed/document.md` |
 | `embed_batch.py` | 否 | 是 | 否 | chunk + `EMBED_PROVIDER=openai` + 出网 |
 | `scholar_embed_batch.py` | 否 | 否 | 是 | chunk + GPU + `[openscholar]` |
+| `POST /papers/{id}/parse`、文献库 **解析缺失** | 否 | 否 | 否 | 仅 `parsed/`（Mac） |
 | `reindex_library.py` | 是 | 是 | 是 | `parsed/`；`reindex_only` 时 PDF 可不在本机 |
 
 ## 本地 Mac 推荐操作
 
-1. 文献库：**扫描** → **解析缺失**（或单篇解析），得到 `parsed/`。  
-2. **不要**在 Mac 上跑全库嵌入（可选）。  
-3. rsync `app.sqlite` + `parsed/` 到超算 → `sbatch submit_vectors.slurm`。  
-4. 拉回库文件，重启 `pnpm dev`。
+1. 文献库：**扫描磁盘** → **同步 Zotero 题录**（可选）。  
+2. **解析缺失** 或单篇 **仅解析** — 只写 `data/parsed/{id}/document.md`，**不**分块、**不**嵌入。  
+3. rsync `app.sqlite` + `parsed/` 到超算 → `sbatch scripts/hpc/submit_vectors.slurm`。  
+4. 拉回 `app.sqlite`（及 `lance/`），重启 `pnpm dev`。
 
 若 Mac 上已部分索引，超算设 `MISSING_ONLY=1`（默认）只补缺失向量。
 
