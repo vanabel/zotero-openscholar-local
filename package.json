@@ -13,6 +13,7 @@
     "reindex": "cd apps/api && .venv/bin/python scripts/reindex_library.py",
     "reindex:all": "cd apps/api && .venv/bin/python scripts/reindex_library.py --all",
     "reindex:unindexed": "cd apps/api && .venv/bin/python scripts/reindex_library.py --all --unindexed-only",
+    "scholar:embed": "cd apps/api && .venv/bin/python scripts/scholar_embed_batch.py --all --missing-only",
     "setup:web": "npm --prefix apps/web install",
     "dev": "concurrently -k -n mineru,api,web -c blue,cyan,magenta \"npm run dev:mineru-api\" \"npm run dev:api\" \"npm run dev:web\"",
     "dev:mineru-api": "bash scripts/dev-mineru-api.sh",
