@@ -13,8 +13,8 @@ def test_classify_references_and_theorem():
 
 
 def test_dedupe_chunk_drafts():
-    d1 = ChunkDraft("t", "path", 0, "same body text " * 5, None, None)
-    d2 = ChunkDraft("t", "path2", 1, "same body text " * 5, None, None)
+    d1 = ChunkDraft("t", "path", '["path"]', 0, "same body text " * 5, None, None)
+    d2 = ChunkDraft("t", "path2", '["path2"]', 1, "same body text " * 5, None, None)
     out = dedupe_chunk_drafts([d1, d2])
     assert len(out) == 1
     assert content_hash(d1.text) == content_hash(d2.text)

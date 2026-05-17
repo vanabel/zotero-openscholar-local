@@ -26,6 +26,13 @@ class MissingBatchQuery(BaseModel):
     lang: str = Field(default="zh", pattern="^(zh|en)$")
 
 
+class RescoreParseBody(BaseModel):
+    limit: int | None = Field(None, ge=1, le=BATCH_INDEX_MAX_IDS)
+    paper_ids: list[str] | None = Field(
+        None, max_length=BATCH_INDEX_MAX_IDS, description="指定 paper_id；省略则处理全部未评分且有 Markdown 的文献"
+    )
+
+
 @router.post("/sync-zotero-metadata")
 def sync_zotero_metadata(
     include_deleted: bool = Query(False, description="是否包含已标记 deleted 的文献"),
@@ -147,6 +154,25 @@ async def parse_missing(body: MissingBatchQuery = MissingBatchQuery()):
     return JSONResponse(status_code=202, content=batch_enqueue_response(tasks, matched=len(ids)))
 
 
+@router.post("/rescore-unscored")
+def rescore_unscored(body: RescoreParseBody = RescoreParseBody()):
+    """
+    为已有 document.md 但 parse_quality_score 为空的文献补写质量分。
+    仅读取本地 Markdown 统计，不跑 MinerU、不重建分块/嵌入。
+    """
+    from app.services.parse_rescore import list_unscored_with_markdown_ids, rescore_batch
+
+    if body.paper_ids:
+        ids = list(dict.fromkeys(body.paper_ids))
+        if body.limit is not None:
+            ids = ids[: body.limit]
+    else:
+        ids = list_unscored_with_markdown_ids(limit=body.limit)
+    if not ids:
+        return {"ok": True, "matched": 0, "scored": 0, "failed": 0}
+    return rescore_batch(ids)
+
+
 @router.post("/summarize-missing")
 async def summarize_missing(body: MissingBatchQuery = MissingBatchQuery()):
     """为已 indexed 但尚无 paper_summary 的文献批量入队摘要生成。"""
@@ -226,6 +252,28 @@ def get_paper_document(
     }
 
 
+@router.get("/{paper_id}/parse-meta")
+def get_parse_meta(paper_id: str):
+    """返回 data/parsed/{id}/meta.json（MinerU 模式、降级原因等）。"""
+    import json
+
+    from app.config import settings
+    from app.services.zotero_scanner import get_paper
+
+    if not get_paper(paper_id):
+        raise HTTPException(status_code=404, detail="未找到文献")
+    path = settings.parsed_dir / paper_id / "meta.json"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="尚无解析元数据，请先建立索引")
+    try:
+        meta = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise HTTPException(status_code=500, detail=f"读取 meta.json 失败: {e}") from e
+    if not isinstance(meta, dict):
+        raise HTTPException(status_code=500, detail="meta.json 格式无效")
+    return {"paper_id": paper_id, "meta": meta}
+
+
 @router.get("/{paper_id}/parse-report")
 def get_parse_report(paper_id: str):
     from app.services.parse_quality import latest_parse_report
@@ -258,7 +306,8 @@ def list_paper_chunks(
         ).fetchone()
         rows = conn.execute(
             """
-            SELECT id, paper_id, section_title, section_path, page_start, page_end,
+            SELECT id, paper_id, section_title, section_path, section_path_json,
+                   page_start, page_end,
                    chunk_index, chunk_type, chunk_quality_score, content_hash,
                    token_count, substr(text, 1, 400) AS text_preview
             FROM chunks
@@ -280,6 +329,17 @@ def get_paper_detail(paper_id: str):
     if not p:
         raise HTTPException(status_code=404, detail="未找到文献")
     return p
+
+
+@router.post("/{paper_id}/rescore-parse-quality")
+def rescore_one_parse_quality(paper_id: str):
+    """单篇：基于已有 document.md 补写 parse_quality_score（不跑 MinerU）。"""
+    from app.services.parse_rescore import rescore_paper_parse_quality
+
+    res = rescore_paper_parse_quality(paper_id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error", "补评分失败"))
+    return res
 
 
 @router.post("/{paper_id}/reindex-only")

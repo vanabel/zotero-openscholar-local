@@ -32,6 +32,8 @@
 | POST | `/papers/index-missing` | 为未 indexed 文献入队；body 可选 `limit`、`force`、`reindex_only` |
 | POST | `/papers/parse-missing` | 为无 `document.md` 文献入队解析 |
 | POST | `/papers/summarize-missing` | 为已 indexed 且无 `paper_summary` 文献入队摘要（需 LLM） |
+| POST | `/papers/rescore-unscored` | 未评分且有 `document.md`：仅补 `parse_quality_score`（不跑 MinerU） |
+| POST | `/papers/{id}/rescore-parse-quality` | 单篇补解析质量分 |
 
 ## 任务
 

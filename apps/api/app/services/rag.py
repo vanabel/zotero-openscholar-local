@@ -24,6 +24,8 @@ from app.services.retrieval_scope import RetrievalScope, scope_from_request
 from app.services.retriever import retrieve_for_query, retrieve_limits
 from app.services.review_templates import ReviewTemplate, build_review_messages, review_to_markdown
 from app.services.summaries import retrieve_summaries_for_query, summaries_to_pseudo_contexts
+from app.services.query_synonyms import expand_query_with_synonyms
+from app.services.section_path import format_chunk_source
 from app.services.translation import (
     expand_query_for_retrieval,
     stream_translate_sse_events,
@@ -34,19 +36,33 @@ from app.services.translation import (
 
 
 def _citations_payload(contexts: list[dict]) -> list[dict]:
-    return [
-        {
-            "ref": i + 1,
-            "chunk_id": c["chunk_id"],
-            "paper_id": c["paper_id"],
-            "title": c.get("title"),
-            "section_path": c.get("section_path"),
-            "page_start": c.get("page_start"),
-            "chunk_type": c.get("chunk_type"),
-            "preview": (c["text"][:280] + "…") if len(c["text"]) > 280 else c["text"],
-        }
-        for i, c in enumerate(contexts)
-    ]
+    out: list[dict] = []
+    for i, c in enumerate(contexts):
+        source = format_chunk_source(
+            title=c.get("title"),
+            section_title=c.get("section_title"),
+            section_path=c.get("section_path"),
+            section_path_json=c.get("section_path_json"),
+            page_start=c.get("page_start"),
+            page_end=c.get("page_end"),
+        )
+        out.append(
+            {
+                "ref": i + 1,
+                "chunk_id": c["chunk_id"],
+                "paper_id": c["paper_id"],
+                "title": c.get("title"),
+                "section_title": c.get("section_title"),
+                "section_path": c.get("section_path"),
+                "section_path_json": c.get("section_path_json"),
+                "page_start": c.get("page_start"),
+                "page_end": c.get("page_end"),
+                "source": source,
+                "chunk_type": c.get("chunk_type"),
+                "preview": (c["text"][:280] + "…") if len(c["text"]) > 280 else c["text"],
+            }
+        )
+    return out
 
 
 async def _retrieve_contexts(
@@ -88,13 +104,21 @@ async def _retrieve_contexts(
 
 
 async def _extra_retrieval_queries(question: str) -> list[str] | None:
-    if not translation_for_retrieval_enabled():
-        return None
-    zh, en = await expand_query_for_retrieval(question)
     extra: list[str] = []
-    for s in (zh, en):
-        if s and s.strip():
-            extra.append(s.strip())
+    seen = {question.strip().lower()}
+    for s in expand_query_with_synonyms(question):
+        key = s.lower()
+        if key not in seen:
+            seen.add(key)
+            extra.append(s)
+    if translation_for_retrieval_enabled():
+        zh, en = await expand_query_for_retrieval(question)
+        for s in (zh, en):
+            if s and s.strip():
+                key = s.strip().lower()
+                if key not in seen:
+                    seen.add(key)
+                    extra.append(s.strip())
     return extra or None
 
 

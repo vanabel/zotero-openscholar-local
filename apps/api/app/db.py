@@ -178,6 +178,8 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE chunks ADD COLUMN chunk_quality_score REAL")
     if "content_hash" not in chunk_cols:
         conn.execute("ALTER TABLE chunks ADD COLUMN content_hash TEXT")
+    if "section_path_json" not in chunk_cols:
+        conn.execute("ALTER TABLE chunks ADD COLUMN section_path_json TEXT")
 
     task_cols = {row[1] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
     if "payload_json" not in task_cols:

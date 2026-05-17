@@ -114,8 +114,9 @@ def test_save_paper_chunks_upsert_before_prune(tmp_path, monkeypatch):
         )
 
     draft = ChunkDraft(
-        section_title="",
+        section_title="intro",
         section_path="/intro",
+        section_path_json='["intro"]',
         page_start=None,
         page_end=None,
         chunk_index=0,

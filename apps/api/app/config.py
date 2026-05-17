@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     )
     # 最多纳入几篇不同文献；0 表示不限制文献篇数
     retrieve_max_papers: int = Field(default=8, ge=0, le=50, validation_alias="RETRIEVE_MAX_PAPERS")
+    retrieve_query_synonyms_enabled: bool = Field(
+        default=True, validation_alias="RETRIEVE_QUERY_SYNONYMS_ENABLED"
+    )
+    retrieve_query_synonyms_path: str = Field(default="", validation_alias="RETRIEVE_QUERY_SYNONYMS_PATH")
+    retrieve_query_synonyms_max_variants: int = Field(
+        default=4, ge=0, le=20, validation_alias="RETRIEVE_QUERY_SYNONYMS_MAX_VARIANTS"
+    )
 
     openscholar_retriever_enabled: bool = Field(default=True, validation_alias="OPENSCHOLAR_RETRIEVER_ENABLED")
     openscholar_reranker_enabled: bool = Field(default=True, validation_alias="OPENSCHOLAR_RERANKER_ENABLED")

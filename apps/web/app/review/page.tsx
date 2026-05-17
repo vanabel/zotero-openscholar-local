@@ -14,6 +14,7 @@ import {
   type RetrievalScopeBody,
   type VerificationStatus,
 } from "@/lib/api";
+import { formatCitationSource } from "@/lib/citationSource";
 
 type Citation = {
   ref: number;
@@ -21,6 +22,10 @@ type Citation = {
   paper_id: string;
   title?: string | null;
   section_path?: string | null;
+  section_title?: string | null;
+  page_start?: number | null;
+  page_end?: number | null;
+  source?: string | null;
   preview?: string;
   verification_status?: VerificationStatus | string;
 };
@@ -412,6 +417,9 @@ export default function ReviewPage() {
                 <div className="font-semibold text-ink-950">
                   [{c.ref}] {c.title || c.paper_id}
                 </div>
+                {formatCitationSource(c) ? (
+                  <div className="mt-1 text-ink-500">{formatCitationSource(c)}</div>
+                ) : null}
                 {c.preview && <div className="mt-2 text-ink-700">{c.preview}</div>}
               </div>
             ))}

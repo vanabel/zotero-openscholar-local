@@ -223,8 +223,10 @@ def build_citation_prompt(
     """构造「证据 + [n] 引用」消息；范式对齐 OpenScholar 类可核查文献 RAG（非官方模型或语料）。"""
     blocks = []
     for i, c in enumerate(contexts, start=1):
+        cid = c["chunk_id"]
         blocks.append(
-            f"[{i}] paper_id={c['paper_id']} chunk_id={c['chunk_id']}\n"
+            f"[CHUNK:{cid}] (序号 [{i}])\n"
+            f"paper_id={c['paper_id']}\n"
             f"标题: {c.get('title') or '未知'}\n"
             f"章节: {c.get('section_path') or ''}\n"
             f"片段:\n{c['text']}\n"
@@ -232,12 +234,16 @@ def build_citation_prompt(
     ctx = "\n\n".join(blocks)
     if lang == "zh":
         sys = (
-            "你是科研文献助手。仅根据提供的片段回答，并在句末使用引用编号如 [1][2]。"
+            "你是科研文献助手。仅根据提供的片段回答。"
+            "每个事实性陈述句末必须使用证据锁定引用 [CHUNK:片段ID]（ID 见各块首行，不要用自编 [1][2]）。"
             "不要编造片段中不存在的内容。若证据不足请明确说明。"
         )
         user = f"问题：\n{question}\n\n证据片段：\n{ctx}"
     else:
-        sys = "You are a scholarly assistant. Answer only from the provided excerpts. Cite like [1][2]."
+        sys = (
+            "You are a scholarly assistant. Answer only from the provided excerpts. "
+            "Cite facts with evidence locks [CHUNK:fragment_id] from each block header (not ad-hoc [1][2])."
+        )
         user = f"Question:\n{question}\n\nEvidence:\n{ctx}"
     return [{"role": "system", "content": sys}, {"role": "user", "content": user}]
 

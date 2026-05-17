@@ -320,7 +320,8 @@ def hydrate_chunks(conn: sqlite3.Connection, hits: list[dict]) -> list[dict]:
     placeholders = ",".join("?" * len(ids))
     rows = conn.execute(
         f"""
-        SELECT ch.id, ch.paper_id, ch.section_title, ch.section_path, ch.page_start, ch.page_end,
+        SELECT ch.id, ch.paper_id, ch.section_title, ch.section_path, ch.section_path_json,
+               ch.page_start, ch.page_end,
                ch.text, ch.embedding_json, ch.scholar_embedding_json, ch.chunk_type,
                p.title AS paper_title
         FROM chunks ch
@@ -340,7 +341,9 @@ def hydrate_chunks(conn: sqlite3.Connection, hits: list[dict]) -> list[dict]:
                 "chunk_id": row["id"],
                 "paper_id": row["paper_id"],
                 "title": row["paper_title"],
+                "section_title": row["section_title"],
                 "section_path": row["section_path"],
+                "section_path_json": row.get("section_path_json"),
                 "page_start": row["page_start"],
                 "page_end": row["page_end"],
                 "text": row["text"],

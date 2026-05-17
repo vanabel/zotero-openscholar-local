@@ -29,6 +29,8 @@ from app.services.pdf_parse import (
 from app.services.parse_retry import maybe_retry_low_quality_parse
 from app.services.task_queue import TaskProgress
 from app.services.task_runtime import index_embed_semaphore, mineru_parse_semaphore
+from app.services.parse_outcome import summarize_parse_outcome
+from app.services.paper_status import set_paper_status
 from app.services.zotero_scanner import get_paper
 
 
@@ -100,16 +102,17 @@ def save_paper_chunks(
         conn.execute(
             """
             INSERT OR REPLACE INTO chunks(
-              id, paper_id, section_title, section_path, page_start, page_end,
+              id, paper_id, section_title, section_path, section_path_json, page_start, page_end,
               chunk_index, text, token_count, embedding_json, scholar_embedding_json,
               chunk_type, chunk_quality_score, content_hash, created_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 cid,
                 paper_id,
                 d.section_title,
                 d.section_path,
+                d.section_path_json,
                 d.page_start,
                 d.page_end,
                 d.chunk_index,
@@ -157,11 +160,15 @@ async def index_paper(
         return {"ok": False, "error": "reindex_only 与 force 不能同时使用（前者仅重建分块/嵌入，不跑 MinerU）"}
     paper = get_paper(paper_id)
     if not paper or paper.get("deleted"):
-        return {"ok": False, "error": "文献不存在或已归档"}
+        err = "文献不存在或已归档"
+        set_paper_status(paper_id, index_status="failed", status_message=err)
+        return {"ok": False, "error": err}
 
     pdf_path = Path(paper["pdf_path"])
     if not pdf_path.exists():
-        return {"ok": False, "error": "PDF 文件不存在"}
+        err = "PDF 文件不存在"
+        set_paper_status(paper_id, index_status="failed", status_message=err)
+        return {"ok": False, "error": err}
 
     out_dir = _parsed_dir(paper_id)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -228,6 +235,7 @@ async def index_paper(
                 force,
             )
         save_parse_report(paper_id, report)
+        parse_status, parse_msg = summarize_parse_outcome(md, meta)
         md_hash = sha256_text(md)
         title_guess = pdf_path.stem
         first_line = md.splitlines()[0] if md else ""
@@ -238,14 +246,30 @@ async def index_paper(
                 """
                 UPDATE papers SET
                   title = COALESCE(NULLIF(?, ''), title),
-                  parse_status = 'parsed',
+                  parse_status = ?,
                   md_sha256 = ?,
-                  index_status = 'pending',
+                  index_status = ?,
+                  status_message = ?,
                   updated_at = ?
                 WHERE id = ?
                 """,
-                (title_guess, md_hash, _utc_now(), paper_id),
+                (
+                    title_guess,
+                    parse_status or "parsed",
+                    md_hash,
+                    "pending" if parse_status != "failed" else "pending",
+                    parse_msg,
+                    _utc_now(),
+                    paper_id,
+                ),
             )
+        if parse_status == "failed":
+            return {
+                "ok": False,
+                "error": parse_msg or "PDF 解析失败",
+                "paper_id": paper_id,
+                "parse_mode": meta.get("mode"),
+            }
     else:
         md, _md_path = loaded
         md_hash = sha256_text(md)

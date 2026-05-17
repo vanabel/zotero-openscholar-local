@@ -47,7 +47,7 @@
 | 任务 | 状态 |
 |------|------|
 | 统一错误 JSON（LLM / MinerU / OpenScholar / 无 document.md） | `[x]` `app/errors.py` + 全局 handler |
-| 文献库：parse/index 失败原因、重试、仅重建索引 | `[~]` `status_message`、重试/仅重建索引按钮；parse 失败仍弱 |
+| 文献库：parse/index 失败原因、重试、仅重建索引 | `[x]` `status_message`（含解析降级提示）、`GET /parse-meta`、重试索引/重试解析 |
 | document.md / chunk 预览 | `[x]` `GET /papers/{id}/document`、`/chunks` + 文献库展开预览 |
 | 最小回归集 fixture（3 英 + 3 中 + 扫描 + 公式 + 图表） | `[x]` 见 [QUALITY_BASELINE.md](./QUALITY_BASELINE.md) |
 | CI：`pnpm test` 默认绿，Ollama/MinerU 标 optional | `[x]` `.github/workflows/ci.yml`；`@pytest.mark.optional`；`pnpm test:api:optional` |
@@ -81,7 +81,7 @@
 | `force=true` 强制重建 | 重新解析后写入（新分覆盖旧分；低于旧分会 `plog` 提示但仍保存） |
 | `reindex_only=true` 仅重建索引 | **不**更新（复用 `document.md`，只重做 chunk / 嵌入） |
 | 索引复用缓存 Markdown（PDF 未变、`need_parse=false`） | 不重新评分（历史上从未评分的仍为未评分） |
-| 升级前已索引的旧数据 | 仍为未评分，需带解析的索引或 `force` 补分 |
+| 升级前已索引的旧数据 | 仍为未评分；可用 **未评分补分**（`POST /papers/rescore-unscored`）或带解析的索引 / `force` |
 
 筛选：`parse_quality_missing` → `parse_quality_score IS NULL`（`zotero_scanner.list_papers`）。低分默认 `parse_quality_lte=0.65`。详见 [CONFIGURATION.md](./CONFIGURATION.md)。
 
@@ -98,10 +98,10 @@
 |------|------|
 | `chunk_type`（abstract / theorem / proof / references …） | `[x]` `chunk_quality.py` |
 | `chunk_quality_score`、`content_hash` | `[x]` 索引时写入 |
-| `section_path` 结构化（JSON 路径） | `[~]` 已有字符串 `section_path` |
+| `section_path` 结构化（JSON 路径） | `[x]` `section_path_json` 列 + 层级标题栈；`section_path` 仍为显示串 |
 | Chunk 去重（页眉页脚、切片重复） | `[x]` `dedupe_chunk_drafts` 索引级 |
 | references-only 不参与普通问答 | `[x]` 检索默认排除 `chunk_type=references` |
-| 前端：chunk 来源（标题 + section + 页码） | `[~]` 引用卡片有部分字段 |
+| 前端：chunk 来源（标题 + section + 页码） | `[x]` API `source` 字段；问答/综述引用卡片展示章节·页码 |
 
 **验收**：同段不重复进 top-k；定理类可单独检索。
 
@@ -116,7 +116,7 @@
 | 跨篇配额 `RETRIEVE_MAX_CHUNKS_PER_PAPER` | `[x]` |
 | 最多文献数 `RETRIEVE_MAX_PAPERS` | `[x]` |
 | Chunk 内容去重（检索结果级） | `[x]` `dedupe_chunks_by_text`（`retriever.py`） |
-| 查询扩展 / 专名同义词 | `[~]` 双语 Hy-MT 扩展已有 |
+| 查询扩展 / 专名同义词 | `[x]` Hy-MT 双语 + `data/query_synonyms.json` 规则扩展 |
 | `eval_queries.jsonl` + 评测脚本 | `[x]` `tests/eval/eval_queries.jsonl`；`scripts/eval_retrieval.py` |
 | LanceDB 替代 SQLite 全表 dense 扫描 | `[x]` `lance_store.py`；`LANCEDB_ENABLED`；未安装时回退 SQLite |
 | `POST /papers/index-missing` | `[x]` 另含 `parse-missing`、`summarize-missing` |
@@ -131,7 +131,7 @@
 
 | 任务 | 状态 |
 |------|------|
-| Evidence locking（`[CHUNK:id]`） | `[~]` prompt 含 chunk_id，未强制对齐 |
+| Evidence locking（`[CHUNK:id]`） | `[x]` prompt 强制 `[CHUNK:id]`；校验后规范为 `[n]` |
 | `CitationVerifier`（存在性、关键词、无引用断言） | `[x]` claim 拆分 + 关键词重叠 |
 | `answer_citations` 表 + claim 拆分 | `[x]` 生成后写入；API 返回 `claims` |
 | 无证据固定降级话术 | `[x]` 无检索片段时固定回复 + 生成后 `[n]` 校验 |

@@ -59,9 +59,20 @@ type DocumentPreview = {
   truncated: boolean;
 };
 
+type ParseMetaResponse = {
+  paper_id: string;
+  meta: {
+    mode?: string;
+    mineru_error?: string;
+    mineru_exit_code?: number;
+    [key: string]: unknown;
+  };
+};
+
 type ChunkPreviewRow = {
   id: string;
   section_path?: string | null;
+  section_path_json?: string | null;
   chunk_index: number;
   text_preview?: string | null;
 };
@@ -226,6 +237,7 @@ export default function LibraryPage() {
   const [previewDoc, setPreviewDoc] = useState<DocumentPreview | null>(null);
   const [previewChunks, setPreviewChunks] = useState<ChunkPreviewRow[]>([]);
   const [previewReport, setPreviewReport] = useState<ParseReport | null>(null);
+  const [previewParseMeta, setPreviewParseMeta] = useState<ParseMetaResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [paperTasks, setPaperTasks] = useState<Map<string, IndexTaskRow>>(new Map());
   const [taskPolling, setTaskPolling] = useState(false);
@@ -392,15 +404,18 @@ export default function LibraryPage() {
     setPreviewDoc(null);
     setPreviewChunks([]);
     setPreviewReport(null);
+    setPreviewParseMeta(null);
     try {
-      const [doc, chunks, report] = await Promise.all([
+      const [doc, chunks, report, parseMeta] = await Promise.all([
         apiGet<DocumentPreview>(`/papers/${encodeURIComponent(id)}/document?max_chars=8000`),
         apiGet<{ items: ChunkPreviewRow[] }>(`/papers/${encodeURIComponent(id)}/chunks?limit=12`),
         apiGet<ParseReport>(`/papers/${encodeURIComponent(id)}/parse-report`).catch(() => null),
+        apiGet<ParseMetaResponse>(`/papers/${encodeURIComponent(id)}/parse-meta`).catch(() => null),
       ]);
       setPreviewDoc(doc);
       setPreviewChunks(chunks.items ?? []);
       setPreviewReport(report);
+      setPreviewParseMeta(parseMeta);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "预览加载失败");
     } finally {
@@ -461,6 +476,28 @@ export default function LibraryPage() {
   }
 
   const INDEX_BATCH_CHUNK = 500;
+
+  async function rescoreUnscored() {
+    setBatchBusy(true);
+    setMsg("正在为未评分文献补写质量分（不跑 MinerU）…");
+    try {
+      const res = await apiPost<{
+        matched?: number;
+        scored?: number;
+        failed?: number;
+      }>("/papers/rescore-unscored", {});
+      setMsg(
+        `补评分完成：可处理 ${res.matched ?? 0} 篇，成功 ${res.scored ?? 0} 篇` +
+          (res.failed ? `，失败 ${res.failed} 篇` : "") +
+          "。",
+      );
+      await refresh();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "补评分失败");
+    } finally {
+      setBatchBusy(false);
+    }
+  }
 
   async function enqueueMissing(
     path: "/papers/index-missing" | "/papers/parse-missing" | "/papers/summarize-missing",
@@ -608,6 +645,15 @@ export default function LibraryPage() {
           >
             摘要缺失
           </button>
+          <button
+            type="button"
+            disabled={batchBusy}
+            onClick={() => void rescoreUnscored()}
+            className="rounded-lg border border-mist-200 px-3 py-2 text-sm hover:bg-mist-50 disabled:opacity-50"
+            title="已有 document.md 的未评分文献：仅统计质量分，不跑 MinerU"
+          >
+            未评分补分
+          </button>
         </div>
       </div>
 
@@ -722,6 +768,7 @@ export default function LibraryPage() {
               const failMsg =
                 (p.status_message && p.status_message.trim()) ||
                 (task?.status === "failed" && task.error ? task.error : null);
+              const parseHint = Boolean(failMsg?.startsWith("解析提示："));
               return (
                 <li key={p.id} className="px-4 py-3">
                   <div className="flex gap-3">
@@ -756,6 +803,7 @@ export default function LibraryPage() {
                               setPreviewDoc(null);
                               setPreviewChunks([]);
                               setPreviewReport(null);
+                              setPreviewParseMeta(null);
                             } else {
                               setExpandedId(p.id);
                               void loadPreview(p.id);
@@ -767,7 +815,13 @@ export default function LibraryPage() {
                         </button>
                       </div>
                       {failMsg && (
-                        <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-900 leading-relaxed">
+                        <p
+                          className={`mt-2 rounded-md border px-2.5 py-2 text-xs leading-relaxed ${
+                            parseHint
+                              ? "border-amber-200 bg-amber-50 text-amber-950"
+                              : "border-red-200 bg-red-50 text-red-900"
+                          }`}
+                        >
                           {failMsg}
                         </p>
                       )}
@@ -787,7 +841,22 @@ export default function LibraryPage() {
                           </div>
                           {previewLoading ? (
                             <p className="text-xs text-ink-600">加载解析报告 / document.md / chunks…</p>
-                          ) : previewReport ? (
+                          ) : (
+                            <>
+                          {previewParseMeta?.meta ? (
+                            <div className="rounded-lg border border-mist-200 bg-mist-50 p-3 text-[11px] text-ink-800">
+                              <p className="font-medium text-ink-900">解析元数据</p>
+                              <p className="mt-1">
+                                模式：<span className="font-mono">{String(previewParseMeta.meta.mode ?? "—")}</span>
+                              </p>
+                              {previewParseMeta.meta.mineru_error ? (
+                                <p className="mt-1 text-amber-900">
+                                  MinerU：{String(previewParseMeta.meta.mineru_error).slice(0, 400)}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {previewReport ? (
                             <div className="rounded-lg border border-mist-200 bg-white p-3 text-xs text-ink-800">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-semibold text-ink-950">解析质量报告</span>
@@ -861,6 +930,8 @@ export default function LibraryPage() {
                               尚无解析质量报告；请执行「建立索引」或「强制重建」（需重新解析 PDF）。「仅重建索引」不会写入质量分。
                             </p>
                           ) : null}
+                            </>
+                          )}
                           {!previewLoading && previewDoc ? (
                             <div className="rounded-lg border border-mist-200 bg-mist-50 p-2">
                               <p className="text-[11px] font-medium text-ink-600">
@@ -879,7 +950,18 @@ export default function LibraryPage() {
                               {previewChunks.map((ch) => (
                                 <li key={ch.id} className="rounded border border-mist-200 bg-white px-2 py-1.5">
                                   <span className="font-medium text-ink-900">
-                                    #{ch.chunk_index} {ch.section_path || ch.id.slice(0, 10)}
+                                    #{ch.chunk_index}{" "}
+                                    {ch.section_path ||
+                                      (ch.section_path_json
+                                        ? (() => {
+                                            try {
+                                              const parts = JSON.parse(ch.section_path_json) as string[];
+                                              return Array.isArray(parts) ? parts.join(" › ") : ch.id.slice(0, 10);
+                                            } catch {
+                                              return ch.id.slice(0, 10);
+                                            }
+                                          })()
+                                        : ch.id.slice(0, 10))}
                                   </span>
                                   {ch.text_preview ? (
                                     <p className="mt-0.5 line-clamp-3 text-ink-600">{ch.text_preview}</p>
@@ -919,6 +1001,15 @@ export default function LibraryPage() {
                             onClick={() => void indexPaper(p.id, false)}
                           >
                             重试索引
+                          </button>
+                        )}
+                        {(p.parse_status === "failed" || parseHint) && (
+                          <button
+                            type="button"
+                            className="rounded-md border border-amber-200 px-3 py-1.5 text-xs text-amber-900 hover:bg-amber-50"
+                            onClick={() => void indexPaper(p.id, true)}
+                          >
+                            重试解析
                           </button>
                         )}
                       </div>

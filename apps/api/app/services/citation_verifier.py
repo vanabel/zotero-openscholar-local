@@ -5,6 +5,7 @@ import re
 from app.services.answer_records import new_answer_id, save_answer_citations
 
 _CITE_NUM_RE = re.compile(r"\[(\d+)\]")
+_CHUNK_REF_RE = re.compile(r"\[CHUNK:([a-f0-9]{32})\]", re.IGNORECASE)
 _SENT_SPLIT = re.compile(r"(?<=[。！？.!?])\s*")
 
 NO_EVIDENCE_ANSWER_ZH = (
@@ -18,6 +19,32 @@ NO_EVIDENCE_ANSWER_EN = (
 
 def no_evidence_answer(lang: str) -> str:
     return NO_EVIDENCE_ANSWER_EN if lang == "en" else NO_EVIDENCE_ANSWER_ZH
+
+
+def chunk_ref_map(contexts: list[dict]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for i, c in enumerate(contexts, start=1):
+        cid = str(c.get("chunk_id") or "").strip()
+        if cid:
+            out[cid] = i
+    return out
+
+
+def normalize_evidence_locks(answer: str, contexts: list[dict]) -> tuple[str, list[str]]:
+    """将 [CHUNK:id] 规范为 [n]；移除无法映射的 chunk 引用。"""
+    cmap = chunk_ref_map(contexts)
+    invalid: list[str] = []
+
+    def repl(m: re.Match[str]) -> str:
+        cid = m.group(1)
+        ref = cmap.get(cid)
+        if ref is None:
+            invalid.append(cid)
+            return ""
+        return f"[{ref}]"
+
+    cleaned = _CHUNK_REF_RE.sub(repl, answer or "")
+    return cleaned, invalid
 
 
 def extract_citation_refs(text: str) -> list[int]:
@@ -174,11 +201,19 @@ def verify_citations(
     if n_ctx == 0:
         return no_evidence_answer(lang), {"ok": False, "reason": "no_contexts", "invalid_refs": [], "valid_refs": []}
 
-    refs = extract_citation_refs(answer)
+    cleaned, invalid_chunks = normalize_evidence_locks(answer, contexts)
+    if invalid_chunks:
+        if lang == "zh":
+            chunk_note = f"\n\n（注：已移除无效证据锁定 {invalid_chunks[:5]}。）"
+        else:
+            chunk_note = f"\n\n(Note: removed invalid CHUNK lock(s) {invalid_chunks[:5]}.)"
+        if chunk_note not in cleaned:
+            cleaned = cleaned.rstrip() + chunk_note
+
+    refs = extract_citation_refs(cleaned)
     valid = sorted({r for r in refs if 1 <= r <= n_ctx})
     invalid = sorted({r for r in refs if r < 1 or r > n_ctx})
 
-    cleaned = answer
     for bad in invalid:
         cleaned = cleaned.replace(f"[{bad}]", "")
 
@@ -218,9 +253,10 @@ def verify_citations(
         )
 
     meta = {
-        "ok": len(invalid) == 0 and claim_meta.get("claims_insufficient", 0) == 0,
+        "ok": len(invalid) == 0 and len(invalid_chunks) == 0 and claim_meta.get("claims_insufficient", 0) == 0,
         "valid_refs": valid,
         "invalid_refs": invalid,
+        "invalid_chunk_refs": invalid_chunks,
         "context_count": n_ctx,
         "answer_id": answer_id,
         "claims": claim_records,
