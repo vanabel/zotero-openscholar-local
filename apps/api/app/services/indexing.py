@@ -19,6 +19,7 @@ from app.services.chunk_quality import (
 from app.services.chunker import ChunkDraft, chunk_markdown, estimate_tokens, stable_chunk_id
 from app.services.parse_quality import analyze_markdown, latest_parse_report, save_parse_report
 from app.services.llm import EmbeddingClient
+from app.services.hpc_pdf_path import resolve_pdf_path
 from app.services.pdf_parse import (
     clear_parsed_output_dir,
     load_parsed_markdown,
@@ -168,7 +169,8 @@ async def index_paper(
         set_paper_status(paper_id, index_status="failed", status_message=err)
         return {"ok": False, "error": err}
 
-    pdf_path = Path(paper["pdf_path"])
+    stored_pdf = Path(paper["pdf_path"])
+    pdf_path = resolve_pdf_path(stored_pdf) or stored_pdf
     out_dir = _parsed_dir(paper_id)
     out_dir.mkdir(parents=True, exist_ok=True)
     if not pdf_path.exists():

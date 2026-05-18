@@ -14,5 +14,7 @@ apps/web/tsconfig.tsbuildinfo
 apps/api/.env
 apps/web/.env.local
 apps/api/.env.hpc
+apps/api/config/mineru.hpc.json
+scripts/hpc/sync_to_hpc.local.env
 # MinerU 云解析断点目录
 **/parsed/**/_mineru_cloud_chunks/

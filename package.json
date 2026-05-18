@@ -14,6 +14,7 @@
     "reindex:all": "cd apps/api && .venv/bin/python scripts/reindex_library.py --all",
     "reindex:unindexed": "cd apps/api && .venv/bin/python scripts/reindex_library.py --all --unindexed-only",
     "scholar:embed": "cd apps/api && .venv/bin/python scripts/scholar_embed_batch.py --all --missing-only",
+    "hpc:parse": "cd apps/api && .venv/bin/python scripts/parse_batch.py --all --missing-only",
     "hpc:chunk": "cd apps/api && .venv/bin/python scripts/chunk_batch.py --all --missing-only",
     "hpc:embed": "cd apps/api && .venv/bin/python scripts/embed_batch.py --all --missing-only",
     "hpc:vectors": "npm run hpc:chunk && npm run hpc:embed && npm run scholar:embed",

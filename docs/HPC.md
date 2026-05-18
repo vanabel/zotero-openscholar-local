@@ -2,6 +2,8 @@
 
 适合 **Mac 本地只解析 PDF**（`document.md`），在 **GPU 集群**上完成分块、`embedding_json`（OpenAI 兼容 API，**无 Ollama**）与 `scholar_embedding_json`（OpenScholar Retriever / CUDA）。
 
+若希望 **PDF 也 rsync 上超算、在集群跑 MinerU 再向量**，见专文 **[HPC_PARSE.md](./HPC_PARSE.md)**（`sync_to_hpc.sh pdfs`、`submit_parse*.slurm`、`parse_batch.py`）。
+
 调度器：**SLURM**。通用脚本：`scripts/hpc/submit_vectors.slurm`；西南大学 GridView 集群见下文 **SWU** 专节。
 
 ## 流程概览
@@ -38,29 +40,41 @@ rsync 下行                           ←   app.sqlite + lance/
 | SLURM 脚本 | `scripts/hpc/submit_vectors.swu.slurm` |
 | 依赖安装 | `bash scripts/hpc/swu_pip_install.sh`（无代理、避免镜像混用） |
 
-### 1. Mac：同步代码与数据
+### 1. Mac：同步代码、数据与模型
 
-集群 `git clone` 常因 **git `http.proxy=localhost:21087`** 失败，推荐 **rsync**（示例主机名 `swu3`，路径按账号修改）：
+集群 `git clone` 常因 **git `http.proxy=localhost:21087`** 失败，推荐仓库内脚本 **`scripts/hpc/sync_to_hpc.sh`**（底层 `rsync`/`scp`）。
+
+**一次性配置**（SSH 别名、超算路径）：
 
 ```bash
-# 仓库（排除 .venv / node_modules）
-rsync -az --exclude '.venv' --exclude 'node_modules' \
-  ./ swu3:~/zotero-openscholar-local/
-
-# 数据
-rsync -az ./apps/api/data/app.sqlite \
-          ./apps/api/data/parsed/ \
-  swu3:~/zotero-openscholar-local/apps/api/data/
-
-# 超算专用配置（勿提交 git）
-scp ./apps/api/.env.hpc swu3:~/zotero-openscholar-local/apps/api/
+cp scripts/hpc/sync_to_hpc.env.example scripts/hpc/sync_to_hpc.local.env
+# 编辑：HPC_SSH=swu3，必要时 HPC_REMOTE_HOME=/public/home/<账号>
+cp apps/api/.env.hpc.example apps/api/.env.hpc
+# 编辑 .env.hpc：DATA_DIR、OPENAI_*、OPENSCHOLAR_RETRIEVER_MODEL（见下）
 ```
 
-`.env.hpc` 中 **`DATA_DIR`** 须为超算绝对路径，例如：
+**分步同步**（在仓库根目录）：
 
-```env
-DATA_DIR=/public/home/<账号>/zotero-openscholar-local/apps/api/data
+```bash
+./scripts/hpc/sync_to_hpc.sh code     # 仓库（排除 .venv、data）
+./scripts/hpc/sync_to_hpc.sh data     # app.sqlite + parsed/
+./scripts/hpc/sync_to_hpc.sh models   # ~/models/openscholar-retriever → 超算
+./scripts/hpc/sync_to_hpc.sh env      # 上传 apps/api/.env.hpc
+# 或一次：./scripts/hpc/sync_to_hpc.sh all
 ```
+
+| 子命令 | 内容 |
+|--------|------|
+| `code` | 项目代码 → `~/zotero-openscholar-local` |
+| `data` | `apps/api/data/app.sqlite`、`parsed/` |
+| `models` | `openscholar-retriever`（`SYNC_RERANKER=1` 时含 `openscholar-reranker`） |
+| `env` | 本地 `apps/api/.env.hpc`（含密钥，勿提交 git） |
+
+`models` 完成后脚本会打印建议在 **`.env.hpc`** 中填写的超算绝对路径。本地权重目录需为标准 HF 布局（`config.json` + `model.safetensors` 或分片），与 Mac 上 `~/models/openscholar-retriever` 一致。
+
+可选：在 `sync_to_hpc.local.env` 设 `SYNC_HF_CACHE=1`，同步整个 `~/.cache/huggingface`（体积大，仅出网极差时用）。
+
+**不必同步**：Ollama GGUF、对话 8B（`openscholar-ms-8b`）、MinerU 权重——超算批处理不调用；普通嵌入走 `OPENAI_*` API。
 
 ### 2. 登录节点：模块 + venv + pip
 
@@ -132,9 +146,13 @@ rsync -avz swu3:~/zotero-openscholar-local/apps/api/data/lance/ ./apps/api/data/
 
 | 文件 | 用途 |
 |------|------|
+| `scripts/hpc/sync_to_hpc.sh` | Mac → 超算：`code` / `data` / `models` / `env` / `all` |
+| `scripts/hpc/sync_to_hpc.env.example` | 同步配置模板 → 复制为 `sync_to_hpc.local.env` |
 | `scripts/hpc/swu_modules.sh` | `module load` Python/CUDA + SLURM `PATH` |
 | `scripts/hpc/swu_pip_install.sh` | 登录节点无代理安装 `.venv` |
 | `scripts/hpc/submit_vectors.swu.slurm` | SWU 分区 + 模块 + 三件套批处理 |
+
+解析 + 向量全流程脚本见 **[HPC_PARSE.md](./HPC_PARSE.md)**。
 
 ---
 
@@ -155,8 +173,9 @@ cp .env.hpc.example .env.hpc
 Mac 同步（示例）：
 
 ```bash
-rsync -avz ./apps/api/data/app.sqlite login:/path/to/synced/data/
-rsync -avz ./apps/api/data/parsed/ login:/path/to/synced/data/parsed/
+# 将 sync_to_hpc.env.example 中 HPC_SSH 改为你的登录主机别名
+./scripts/hpc/sync_to_hpc.sh data
+./scripts/hpc/sync_to_hpc.sh models
 ```
 
 ### 2. 配置 `.env.hpc`（无 Ollama、允许出网）
@@ -258,6 +277,8 @@ pnpm run hpc:vectors   # 本地调试：顺序执行上述三步（需 .env 配 
 | **`malformed database schema (chunks_fts)`** | 登录节点 SQLite 过旧（如 3.7）；安装 **`pysqlite3-binary`**（`pip install -e '.[hpc]'` 或安装脚本已包含） |
 | 作业三步均为 **skip** | 库中已有向量；加 `FORCE=1` 或换未索引的 `paper_id` |
 | 登录节点 **`torch.cuda.is_available()` 为 False** | 正常；以计算节点 GPU 作业日志为准 |
+| **Retriever 在超算重新下载** | 在 `.env.hpc` 设 `OPENSCHOLAR_RETRIEVER_MODEL` 为 rsync 后的**超算路径**，勿保留 Mac 的 `/Users/...` |
+| `跳过 openscholar-retriever：未找到有效 HF 目录` | 本地 `~/models/openscholar-retriever` 缺权重；先在 Mac 下全再 `sync_to_hpc.sh models` |
 
 ## 参考
 
