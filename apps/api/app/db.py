@@ -1,6 +1,10 @@
 import json
-import sqlite3
 from contextlib import contextmanager
+
+try:
+    import pysqlite3 as sqlite3  # type: ignore[no-redef]  # 超算系统 sqlite 3.7 无法读 FTS5
+except ImportError:
+    import sqlite3
 from pathlib import Path
 
 from app.config import settings

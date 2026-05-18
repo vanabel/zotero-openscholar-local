@@ -178,7 +178,7 @@
 | 单篇摘要入队 | `[x]` `POST /papers/{id}/summarize` |
 | MinerU / 嵌入并发限制（M4 24G） | `[x]` `MINERU_PARSE_CONCURRENCY`、`INDEX_EMBED_CONCURRENCY`、`TASK_WORKER_CONCURRENCY` |
 | 独立 Worker 进程 / API 与慢任务分离 | `[x]` `TASK_WORKER_MODE=external` + `scripts/run_task_worker.py`；`pnpm run dev:external` |
-| 超算批量向量（SLURM） | `[x]` `chunk_batch` / `embed_batch`（OpenAI API）/ `scholar_embed_batch` + `submit_vectors.slurm`；见 [HPC.md](./HPC.md) |
+| 超算批量向量（SLURM） | `[x]` 三件套 + `submit_vectors.slurm`；SWU GridView 已冒烟（`submit_vectors.swu.slurm`、`swu_pip_install.sh`）；见 [HPC.md](./HPC.md) |
 | 文献库「仅解析」/`parse_only` | `[x]` `POST /papers/{id}/parse`；`parse-missing` 仅写 `parsed/` |
 
 **索引嵌入说明**（与 `EMBED_PROVIDER` 独立）：
