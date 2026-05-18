@@ -193,7 +193,7 @@
 ## P7 — 明确延后
 
 - ScholarQA 大规模评测  
-- Transformers 直连 OpenScholar-8B（Ollama 够用）  
+- Transformers 直连 OpenScholar-8B | `[x]` `CHAT_PROVIDER=transformers` + `OPENSCHOLAR_CHAT_*`  
 - 多用户、shadcn 全面换皮  
 
 ### Mano-P / Cider GUI 自动化

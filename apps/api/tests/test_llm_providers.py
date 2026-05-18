@@ -56,6 +56,12 @@ def test_openai_embed_model_override(monkeypatch, clear_openai):
     assert embed_model_id() == "openai:text-embedding-3-large"
 
 
+def test_transformers_chat_provider(monkeypatch, clear_openai):
+    monkeypatch.setattr(settings, "chat_provider", "transformers")
+    assert settings.resolved_chat_provider() == "transformers"
+    assert chat_model_id().startswith("transformers:")
+
+
 def test_invalid_provider_rejected():
     from pydantic import ValidationError
 

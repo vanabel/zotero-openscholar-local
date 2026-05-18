@@ -9,7 +9,9 @@ import shutil
 import tempfile
 import time
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar
 from urllib.parse import urlparse
 
 import httpx
@@ -52,6 +54,93 @@ def _api_json(resp: httpx.Response) -> dict:
     return data
 
 
+_CLOUD_REQUEST_RETRIES = 4
+
+_TRANSIENT_HTTPX: tuple[type[BaseException], ...] = (
+    httpx.ConnectError,
+    httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    httpx.RemoteProtocolError,
+    httpx.PoolTimeout,
+)
+
+T = TypeVar("T")
+
+
+def _url_host_hint(url: str) -> str:
+    try:
+        pr = urlparse(url)
+        if pr.netloc:
+            return f"（{pr.scheme}://{pr.netloc}）"
+    except Exception:
+        pass
+    return ""
+
+
+def _http_status_retryable(status_code: int) -> bool:
+    return status_code in (429, 502, 503, 504)
+
+
+def _backoff_before_retry(attempt: int) -> None:
+    time.sleep(min(2.0 * (2**attempt), 30.0))
+
+
+def _cloud_request_with_retry(
+    op: str,
+    fn: Callable[[], T],
+    *,
+    retries: int = _CLOUD_REQUEST_RETRIES,
+    hint: str = "",
+) -> T:
+    """
+    对 MinerU API / OSS 上传 / CDN 下载等 httpx 调用做瞬态错误重试（DNS、连接、超时、5xx）。
+    业务错误（MinerUCloudError、4xx）不重试。
+    """
+    last: BaseException | None = None
+    hint_s = hint or ""
+    for attempt in range(retries):
+        try:
+            return fn()
+        except MinerUCloudError:
+            raise
+        except httpx.HTTPStatusError as e:
+            if _http_status_retryable(e.response.status_code) and attempt + 1 < retries:
+                last = e
+                plog_info(
+                    "parse",
+                    "MinerU 云端 %s HTTP %s（尝试 %s/%s）%s",
+                    op,
+                    e.response.status_code,
+                    attempt + 1,
+                    retries,
+                    hint_s,
+                )
+                _backoff_before_retry(attempt)
+                continue
+            raise MinerUCloudError(
+                f"MinerU 云端{op} HTTP {e.response.status_code}{hint_s}: {clip(e.response.text, 300)}"
+            ) from e
+        except _TRANSIENT_HTTPX as e:
+            last = e
+            plog_info(
+                "parse",
+                "MinerU 云端 %s 失败（尝试 %s/%s）%s: %s",
+                op,
+                attempt + 1,
+                retries,
+                hint_s,
+                e,
+            )
+            if attempt + 1 < retries:
+                _backoff_before_retry(attempt)
+                continue
+    raise MinerUCloudError(
+        f"MinerU 云端{op}失败（已重试 {retries} 次）{hint_s}。"
+        f"多为域名解析失败或网络波动；可检查 DNS/代理/VPN 后重试索引。"
+        f" 最后一次错误: {last}"
+    ) from last
+
+
 def _upload_and_submit(
     client: httpx.Client,
     pdf_path: Path,
@@ -66,16 +155,34 @@ def _upload_and_submit(
         "model_version": model,
     }
     plog_info("parse", "MinerU 云端申请上传 name=%s data_id=%s", pdf_path.name, paper_id[:8])
-    data = _api_json(client.post(f"{_base_url()}/api/v4/file-urls/batch", headers=_headers(), json=payload))
+    api_hint = _url_host_hint(_base_url())
+
+    def _post_batch_urls() -> dict:
+        return _api_json(
+            client.post(
+                f"{_base_url()}/api/v4/file-urls/batch",
+                headers=_headers(),
+                json=payload,
+            )
+        )
+
+    data = _cloud_request_with_retry("申请上传", _post_batch_urls, hint=api_hint)
     batch_id = data.get("batch_id")
     urls = data.get("file_urls")
     if not batch_id or not urls or not isinstance(urls, list):
         raise MinerUCloudError("未返回 batch_id 或 file_urls")
-    upload_url = urls[0]
-    with pdf_path.open("rb") as f:
-        up = client.put(upload_url, content=f.read(), timeout=600.0)
-    if up.status_code != 200:
+    upload_url = str(urls[0])
+
+    def _put_pdf() -> None:
+        with pdf_path.open("rb") as f:
+            up = client.put(upload_url, content=f.read(), timeout=600.0)
+        if up.status_code == 200:
+            return
+        if _http_status_retryable(up.status_code):
+            up.raise_for_status()
         raise MinerUCloudError(f"上传 PDF 失败 HTTP {up.status_code}: {clip(up.text, 400)}")
+
+    _cloud_request_with_retry("上传 PDF", _put_pdf, hint=_url_host_hint(upload_url))
     plog_info("parse", "MinerU 云端上传完成 batch_id=%s", batch_id)
     return str(batch_id)
 
@@ -170,8 +277,14 @@ def _poll_batch_done(client: httpx.Client, batch_id: str, file_name: str) -> str
     near_done_announced = False
     poll_started_at = time.monotonic()
 
+    poll_hint = f" batch_id={batch_id[:8]}"
+
     while time.monotonic() < deadline:
-        data = _api_json(client.get(url, headers=_headers(), timeout=60.0))
+
+        def _fetch_batch_status() -> dict:
+            return _api_json(client.get(url, headers=_headers(), timeout=60.0))
+
+        data = _cloud_request_with_retry("解析结果轮询", _fetch_batch_status, hint=poll_hint)
         results = data.get("extract_result")
         if not isinstance(results, list):
             time.sleep(interval)
@@ -261,54 +374,15 @@ def _poll_batch_done(client: httpx.Client, batch_id: str, file_name: str) -> str
     raise MinerUCloudError(f"MinerU 云端解析超时（>{settings.parse_timeout_sec}s）")
 
 
-_ZIP_DOWNLOAD_RETRIES = 4
-
-
 def _download_mineru_zip_bytes(client: httpx.Client, zip_url: str) -> bytes:
-    """
-    下载解析结果 zip。full_zip_url 常指向第三方 CDN，偶发 DNS 失败（如 nodename nor servname）；
-    对连接类错误重试，最终抛出 MinerUCloudError 以便上层 pypdf 降级而非 ASGI 500。
-    """
-    hint = ""
-    try:
-        pr = urlparse(zip_url)
-        if pr.netloc:
-            hint = f"（{pr.scheme}://{pr.netloc}）"
-    except Exception:
-        pass
+    """下载解析结果 zip（full_zip_url 常指向第三方 CDN，走统一瞬态重试）。"""
 
-    last: BaseException | None = None
-    for attempt in range(_ZIP_DOWNLOAD_RETRIES):
-        try:
-            zr = client.get(zip_url, timeout=600.0)
-            zr.raise_for_status()
-            return zr.content
-        except httpx.HTTPStatusError as e:
-            raise MinerUCloudError(
-                f"下载 MinerU 结果 zip HTTP {e.response.status_code}{hint}: {clip(e.response.text, 300)}"
-            ) from e
-        except (
-            httpx.ConnectError,
-            httpx.ReadTimeout,
-            httpx.WriteTimeout,
-            httpx.RemoteProtocolError,
-        ) as e:
-            last = e
-            plog_info(
-                "parse",
-                "下载结果 zip 失败（尝试 %s/%s）%s: %s",
-                attempt + 1,
-                _ZIP_DOWNLOAD_RETRIES,
-                hint or "",
-                e,
-            )
-            if attempt + 1 < _ZIP_DOWNLOAD_RETRIES:
-                time.sleep(min(2.0 * (2**attempt), 30.0))
-    raise MinerUCloudError(
-        f"下载 MinerU 结果 zip 失败（已重试 {_ZIP_DOWNLOAD_RETRIES} 次）{hint}。"
-        f"多为 CDN 域名解析失败或网络波动；可检查 DNS/代理/VPN 后重试索引。"
-        f" 最后一次错误: {last}"
-    ) from last
+    def _get_zip() -> bytes:
+        zr = client.get(zip_url, timeout=600.0)
+        zr.raise_for_status()
+        return zr.content
+
+    return _cloud_request_with_retry("下载结果 zip", _get_zip, hint=_url_host_hint(zip_url))
 
 
 def _markdown_from_zip(zip_bytes: bytes, out_dir: Path) -> str:

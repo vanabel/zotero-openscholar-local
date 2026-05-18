@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
-ProviderName = Literal["ollama", "openai"]
+ProviderName = Literal["ollama", "openai", "transformers"]
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # apps/api 目录（含 .env）；配置加载不依赖进程 cwd，避免从仓库根启动时读到错误的 .env
@@ -92,6 +92,12 @@ class Settings(BaseSettings):
     openscholar_rerank_batch_size: int = Field(default=8, ge=1, le=64, validation_alias="OPENSCHOLAR_RERANK_BATCH_SIZE")
     openscholar_rerank_max_chars: int = Field(default=1800, ge=256, le=8000, validation_alias="OPENSCHOLAR_RERANK_MAX_CHARS")
     openscholar_rerank_pool: int = Field(default=80, ge=10, le=200, validation_alias="OPENSCHOLAR_RERANK_POOL")
+    # 主对话 Transformers 权重（HF id 或本地目录）；留空时可从 OLLAMA_CHAT_MODEL 的 OpenScholar GGUF 名推断
+    openscholar_chat_model: str = Field(default="", validation_alias="OPENSCHOLAR_CHAT_MODEL")
+    openscholar_chat_device: str = Field(default="auto", validation_alias="OPENSCHOLAR_CHAT_DEVICE")
+    openscholar_chat_max_new_tokens: int = Field(
+        default=4096, ge=256, le=16384, validation_alias="OPENSCHOLAR_CHAT_MAX_NEW_TOKENS"
+    )
     translation_ollama_model: str = Field(default="", validation_alias="TRANSLATION_OLLAMA_MODEL")
     translation_ollama_url: str | None = Field(default=None, validation_alias="TRANSLATION_OLLAMA_URL")
     translation_temperature: float = Field(default=0.1, ge=0.0, le=1.0, validation_alias="TRANSLATION_TEMPERATURE")
@@ -144,8 +150,8 @@ class Settings(BaseSettings):
 
     # 任务队列：embedded=API 进程内 Worker；external=仅 scripts/run_task_worker.py 消费
     task_worker_mode: str = Field(default="embedded", validation_alias="TASK_WORKER_MODE")
-    task_worker_concurrency: int = Field(default=1, ge=1, le=4, validation_alias="TASK_WORKER_CONCURRENCY")
-    mineru_parse_concurrency: int = Field(default=1, ge=1, le=2, validation_alias="MINERU_PARSE_CONCURRENCY")
+    task_worker_concurrency: int = Field(default=1, ge=1, le=16, validation_alias="TASK_WORKER_CONCURRENCY")
+    mineru_parse_concurrency: int = Field(default=1, ge=1, le=128, validation_alias="MINERU_PARSE_CONCURRENCY")
     index_embed_concurrency: int = Field(default=2, ge=1, le=8, validation_alias="INDEX_EMBED_CONCURRENCY")
 
     # 启动时 SQLite VACUUM：强制每次执行，或 freelist/page_count ≥ 比例阈值时自动执行
@@ -177,8 +183,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _validate_providers(self) -> Settings:
         for field, val in (("chat_provider", self.chat_provider), ("embed_provider", self.embed_provider)):
-            if val not in ("auto", "ollama", "openai"):
-                raise ValueError(f"{field} must be one of: auto, ollama, openai (got {val!r})")
+            if val not in ("auto", "ollama", "openai", "transformers"):
+                raise ValueError(f"{field} must be one of: auto, ollama, openai, transformers (got {val!r})")
         if self.task_worker_mode not in ("embedded", "external"):
             raise ValueError("task_worker_mode must be embedded or external")
         return self
@@ -190,6 +196,8 @@ class Settings(BaseSettings):
         p = self.chat_provider
         if p == "auto":
             return "openai" if self.openai_ready() else "ollama"
+        if p == "transformers":
+            return "transformers"
         return p  # type: ignore[return-value]
 
     def resolved_embed_provider(self) -> ProviderName:
@@ -197,6 +205,23 @@ class Settings(BaseSettings):
         if p == "auto":
             return "openai" if self.openai_ready() else "ollama"
         return p  # type: ignore[return-value]
+
+    def effective_openscholar_chat_model(self) -> str:
+        """OpenScholar-8B 的 Transformers 权重路径（HF id 或本地目录）。
+
+        顺序：显式 ``OPENSCHOLAR_CHAT_MODEL`` → ``~/models/openscholar-ms-8b``（若权重完整）
+        → 由 ``OLLAMA_CHAT_MODEL`` 的 OpenScholar GGUF 名映射到 HF id。
+        """
+        explicit = (self.openscholar_chat_model or "").strip()
+        if explicit:
+            return explicit
+        local = resolve_local_openscholar_chat_dir()
+        if local:
+            return local
+        mapped = _hf_chat_model_from_ollama_tag(self.ollama_chat_model or "")
+        if mapped:
+            return mapped
+        return _DEFAULT_OPENSCHOLAR_HF_CHAT
 
     @model_validator(mode="after")
     def _resolve_data_dir_and_clamp_retrieve(self) -> Settings:
@@ -231,6 +256,60 @@ class Settings(BaseSettings):
 
     def task_worker_embedded(self) -> bool:
         return (self.task_worker_mode or "embedded").strip().lower() != "external"
+
+
+_DEFAULT_OPENSCHOLAR_HF_CHAT = "OpenSciLM/Llama-3.1_OpenScholar-8B"
+
+# 常见 Ollama OpenScholar-8B GGUF 标签 → 官方 HF 全量权重（同一模型，不同打包）
+_OLLAMA_OPENSCHOLAR_GGUF_TO_HF: dict[str, str] = {
+    "hf.co/quantfactory/llama-3.1_openscholar-8b-gguf:q4_k_m": _DEFAULT_OPENSCHOLAR_HF_CHAT,
+}
+
+# ``ls ~/models`` 下 Transformers 主对话目录（按优先级）
+_LOCAL_OPENSCHOLAR_CHAT_DIR_NAMES = (
+    "openscholar-ms-8b",
+    "Llama-3.1_OpenScholar-8B",
+    "OpenScholar-8B",
+)
+
+
+def _local_models_root() -> Path:
+    return (Path.home() / "models").expanduser().resolve()
+
+
+def is_usable_hf_model_dir(path: Path) -> bool:
+    """目录含 config.json 且根目录有完整权重（非仅 tokenizer / 未完成下载）。"""
+    if not path.is_dir() or not (path / "config.json").is_file():
+        return False
+    if (path / "model.safetensors").is_file() or (path / "pytorch_model.bin").is_file():
+        return True
+    if list(path.glob("model-*-of-*.safetensors")) or list(path.glob("pytorch_model-*.bin")):
+        return True
+    return False
+
+
+def resolve_local_openscholar_chat_dir() -> str | None:
+    """``~/models`` 下可用的 OpenScholar-8B HF 目录；权重未下完则返回 None。"""
+    root = _local_models_root()
+    if not root.is_dir():
+        return None
+    for name in _LOCAL_OPENSCHOLAR_CHAT_DIR_NAMES:
+        candidate = root / name
+        if is_usable_hf_model_dir(candidate):
+            return str(candidate)
+    return None
+
+
+def _hf_chat_model_from_ollama_tag(ollama_model: str) -> str | None:
+    """Ollama 模型名不能用于 Transformers；仅识别 OpenScholar-8B GGUF 并返回对应 HF id。"""
+    key = ollama_model.strip().lower()
+    if not key:
+        return None
+    if key in _OLLAMA_OPENSCHOLAR_GGUF_TO_HF:
+        return _OLLAMA_OPENSCHOLAR_GGUF_TO_HF[key]
+    if "openscholar" in key and ("gguf" in key or "quantfactory" in key):
+        return _DEFAULT_OPENSCHOLAR_HF_CHAT
+    return None
 
 
 settings = Settings()

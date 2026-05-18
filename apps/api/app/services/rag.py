@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 
+import httpx
+
 from app.pipeline_logging import clip, plog_debug, plog_info
 from app.services.chat_cache import (
     get_cached_answer,
@@ -19,7 +21,7 @@ from app.services.citation_verifier import (
     no_evidence_answer,
     verify_citations,
 )
-from app.services.llm import LLMClient, build_citation_prompt, try_embed_one
+from app.services.llm import LLMClient, LLMConnectionError, build_citation_prompt, try_embed_one
 from app.services.retrieval_scope import RetrievalScope, scope_from_request
 from app.services.retriever import retrieve_for_query, retrieve_limits
 from app.services.review_templates import ReviewTemplate, build_review_messages, review_to_markdown
@@ -261,9 +263,13 @@ async def answer_with_citations_stream(
     messages = build_citation_prompt(question, contexts, lang=lang)
     t1 = time.monotonic()
     buf: list[str] = []
-    async for piece in llm.chat_stream(messages, temperature=0.2):
+    async for ev in _stream_llm_token_events(llm, messages, temperature=0.2):
+        if ev.get("type") == "error":
+            yield ev
+            return
+        piece = str(ev.get("t") or "")
         buf.append(piece)
-        yield {"type": "token", "t": piece}
+        yield ev
     plog_info("rag", "answer_stream LLM 流结束 耗时=%.2fs", time.monotonic() - t1)
     full = "".join(buf)
     full, citation_check = verify_citations(full, contexts, lang=lang, persist=True, source_type="chat")
@@ -301,6 +307,28 @@ async def answer_with_citations_stream(
 
 def _review_query(topic: str, focus: str | None) -> str:
     return topic if not focus else f"{topic}。重点：{focus}"
+
+
+async def _stream_llm_token_events(
+    llm: LLMClient,
+    messages: list[dict[str, str]],
+    *,
+    temperature: float,
+) -> AsyncIterator[dict]:
+    """将 chat_stream 转为 SSE token 事件；连接失败时 yield error 而非抛到 ASGI。"""
+    try:
+        async for piece in llm.chat_stream(messages, temperature=temperature):
+            yield {"type": "token", "t": piece}
+    except LLMConnectionError as e:
+        plog_info("rag", "LLM 连接失败: %s", e)
+        yield {"type": "error", "message": str(e), "code": "llm_error"}
+    except httpx.HTTPStatusError as e:
+        msg = f"LLM HTTP {e.response.status_code}: {clip(e.response.text, 400)}"
+        plog_info("rag", "LLM HTTP 错误: %s", msg)
+        yield {"type": "error", "message": msg, "code": "llm_error"}
+    except RuntimeError as e:
+        plog_info("rag", "LLM 运行时错误: %s", e)
+        yield {"type": "error", "message": str(e), "code": "llm_error"}
 
 
 async def write_literature_review(
@@ -411,9 +439,13 @@ async def write_literature_review_stream(
     messages = build_review_messages(topic, focus, contexts, lang, template=template)
     t1 = time.monotonic()
     buf: list[str] = []
-    async for piece in llm.chat_stream(messages, temperature=0.35):
+    async for ev in _stream_llm_token_events(llm, messages, temperature=0.35):
+        if ev.get("type") == "error":
+            yield ev
+            return
+        piece = str(ev.get("t") or "")
         buf.append(piece)
-        yield {"type": "token", "t": piece}
+        yield ev
     plog_info("review", "review_stream LLM 结束 耗时=%.2fs", time.monotonic() - t1)
     full = "".join(buf)
     full, citation_check = verify_citations(full, contexts, lang=lang, persist=True, source_type="review")

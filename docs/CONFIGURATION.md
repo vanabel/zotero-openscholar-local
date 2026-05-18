@@ -21,7 +21,7 @@ cp apps/web/.env.example apps/web/.env.local   # 可选
 
 | 变量 | 说明 |
 |------|------|
-| `CHAT_PROVIDER` / `EMBED_PROVIDER` | `auto` \| `ollama` \| `openai`，可混用 |
+| `CHAT_PROVIDER` / `EMBED_PROVIDER` | `auto` \| `ollama` \| `openai` \| `transformers`（仅 CHAT），可混用 |
 | `OLLAMA_*` | 本机对话与嵌入 |
 | `OPENAI_*` / `OPENAI_EMBED_MODEL` | OpenAI 兼容网关 |
 
@@ -59,7 +59,7 @@ pnpm run download:mineru-models   # 或 mineru-models-download
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `TASK_WORKER_MODE` | `embedded` | `embedded`：API 进程内消费队列；`external`：仅入队，另开 Worker |
-| `TASK_WORKER_CONCURRENCY` | `1` | 同时执行的任务数（1–4）；摘要与索引共用同一队列 |
+| `TASK_WORKER_CONCURRENCY` | `1` | 同时执行的任务数（1–16）；摘要与索引共用同一队列 |
 
 `external` 时：
 
@@ -92,15 +92,44 @@ pnpm run dev:external   # 或 API + pnpm run dev:worker
 
 ## 主对话模型（OpenScholar-8B）
 
-Ollama 需 **GGUF**，例如：
+### 方式 A：Ollama（GGUF，省显存）
 
 ```bash
 ollama run hf.co/QuantFactory/Llama-3.1_OpenScholar-8B-GGUF:Q4_K_M
 ```
 
-`.env`：`OLLAMA_CHAT_MODEL=...`
+```env
+CHAT_PROVIDER=ollama
+OLLAMA_CHAT_MODEL=hf.co/QuantFactory/Llama-3.1_OpenScholar-8B-GGUF:Q4_K_M
+```
 
-Retriever/Reranker 在 `apps/api/.venv` 用 PyTorch 加载，**不必** `ollama pull`。
+### 方式 B：Transformers 直连（Ollama 不够用 / 需完整 HF 权重）
+
+需先安装可选依赖：
+
+```bash
+cd apps/api && pip install -e '.[openscholar]'
+```
+
+```env
+CHAT_PROVIDER=transformers
+OPENSCHOLAR_CHAT_MODEL=OpenSciLM/Llama-3.1_OpenScholar-8B   # transformers 只读这一项（可改为本地目录）
+OPENSCHOLAR_CHAT_DEVICE=auto
+OPENSCHOLAR_CHAT_MAX_NEW_TOKENS=4096
+```
+
+`OLLAMA_CHAT_MODEL`（如 `hf.co/QuantFactory/Llama-3.1_OpenScholar-8B-GGUF:Q4_K_M`）是 **Ollama 里的 GGUF 量化包**，Transformers **不能**直接加载该字符串。同一套 OpenScholar-8B 在 Transformers 侧对应 HF 全量权重 `OpenSciLM/Llama-3.1_OpenScholar-8B`。
+
+若未设置 `OPENSCHOLAR_CHAT_MODEL`，会按顺序选择：
+
+1. `~/models/openscholar-ms-8b`（或同目录下其它 HF 布局，且根目录有 `model.safetensors` / `pytorch_model.bin`）
+2. 由 `OLLAMA_CHAT_MODEL` 的 OpenScholar GGUF 名映射到 `OpenSciLM/Llama-3.1_OpenScholar-8B`
+
+`~/models/openscholar-retriever` / `openscholar-reranker` 仅用于检索，与对话权重无关。`openscholar-q4` 为 Ollama 侧缓存占位；GGUF 在 Ollama 内由 `OLLAMA_CHAT_MODEL` 引用。若 `openscholar-ms-8b` 只有 tokenizer、权重在 `._____temp` 且约 450MB，说明 **ModelScope 下载未完成**，需补全后再走本地路径。
+
+首次运行会从 Hugging Face 下载约 16GB；Apple Silicon 建议 `mps`，约需 16GB+ 统一内存。可与 `EMBED_PROVIDER=openai` 混用。
+
+Retriever/Reranker 与对话模型独立，均在 `apps/api/.venv` 用 PyTorch 加载。
 
 ## 解析质量分
 

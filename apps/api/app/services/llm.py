@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -13,12 +14,58 @@ from app.config import settings
 from app.pipeline_logging import clip, plog_debug, plog_info
 
 
+class LLMConnectionError(RuntimeError):
+    """LLM 服务不可达（Ollama 未启动、DNS、网络等）。"""
+
+
+_LLM_CONNECT_RETRIES = 4
+
+_TRANSIENT_HTTPX: tuple[type[BaseException], ...] = (
+    httpx.ConnectError,
+    httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    httpx.RemoteProtocolError,
+    httpx.PoolTimeout,
+)
+
+
+def _http_status_retryable(status_code: int) -> bool:
+    return status_code in (429, 502, 503, 504)
+
+
+async def _async_backoff(attempt: int) -> None:
+    await asyncio.sleep(min(2.0 * (2**attempt), 30.0))
+
+
+def _connect_error_message(
+    exc: BaseException,
+    *,
+    provider: str,
+    base_url: str,
+    model: str,
+) -> str:
+    if provider == "ollama":
+        return (
+            f"无法连接 Ollama（{base_url}，模型 {model}）：{exc}。"
+            "请确认已运行 `ollama serve`，且 `ollama pull` 已拉取该模型。"
+        )
+    return f"无法连接 OpenAI 兼容 API（{base_url}，模型 {model}）：{exc}"
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _chat_provider_name() -> str:
+    return settings.resolved_chat_provider()
+
+
 def _use_openai_chat() -> bool:
-    return settings.resolved_chat_provider() == "openai"
+    return _chat_provider_name() == "openai"
+
+
+def _use_transformers_chat() -> bool:
+    return _chat_provider_name() == "transformers"
 
 
 def _use_openai_embed() -> bool:
@@ -36,6 +83,8 @@ def _require_openai(capability: str) -> None:
 def chat_model_id() -> str:
     if _use_openai_chat():
         return f"openai:{settings.openai_chat_model}"
+    if _use_transformers_chat():
+        return f"transformers:{settings.effective_openscholar_chat_model()}"
     return f"ollama:{settings.ollama_chat_model}"
 
 
@@ -48,15 +97,24 @@ def embed_model_id() -> str:
 class LLMClient:
     async def chat(self, messages: list[dict[str, str]], temperature: float = 0.2) -> str:
         use_openai = _use_openai_chat()
-        plog_info(
-            "llm",
-            "chat 开始 provider=%s model=%s temp=%s",
-            "openai" if use_openai else "ollama",
-            settings.openai_chat_model if use_openai else settings.ollama_chat_model,
-            temperature,
+        use_transformers = _use_transformers_chat()
+        provider = _chat_provider_name()
+        model = (
+            settings.openai_chat_model
+            if use_openai
+            else settings.effective_openscholar_chat_model()
+            if use_transformers
+            else settings.ollama_chat_model
         )
+        plog_info("llm", "chat 开始 provider=%s model=%s temp=%s", provider, model, temperature)
         plog_debug("llm", "chat messages 条数=%s 总字符约=%s", len(messages), sum(len(m.get("content") or "") for m in messages))
         t0 = time.monotonic()
+        if use_transformers:
+            from app.services.openscholar_chat import chat_transformers
+
+            text = await chat_transformers(messages, temperature)
+            plog_info("llm", "chat 完成 耗时=%.2fs 输出字符=%s", time.monotonic() - t0, len(text or ""))
+            return text
         if use_openai:
             _require_openai("对话")
             base = settings.openai_api_base.rstrip("/")
@@ -83,21 +141,53 @@ class LLMClient:
             "stream": False,
             "options": {"temperature": temperature},
         }
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            r = await client.post(url, json=payload)
-            r.raise_for_status()
-            data = r.json()
-            text = data.get("message", {}).get("content") or data.get("response") or ""
-            plog_info("llm", "chat 完成 耗时=%.2fs 输出字符=%s", time.monotonic() - t0, len(text or ""))
-            plog_debug("llm", "chat 输出预览: %s", clip(text or "", 400))
-            return text
+        last: BaseException | None = None
+        for attempt in range(_LLM_CONNECT_RETRIES):
+            try:
+                async with httpx.AsyncClient(timeout=300.0) as client:
+                    r = await client.post(url, json=payload)
+                    r.raise_for_status()
+                    data = r.json()
+                    text = data.get("message", {}).get("content") or data.get("response") or ""
+                    plog_info("llm", "chat 完成 耗时=%.2fs 输出字符=%s", time.monotonic() - t0, len(text or ""))
+                    plog_debug("llm", "chat 输出预览: %s", clip(text or "", 400))
+                    return text
+            except httpx.HTTPStatusError as e:
+                if _http_status_retryable(e.response.status_code) and attempt + 1 < _LLM_CONNECT_RETRIES:
+                    plog_info("llm", "chat Ollama HTTP %s（尝试 %s/%s）", e.response.status_code, attempt + 1, _LLM_CONNECT_RETRIES)
+                    await _async_backoff(attempt)
+                    continue
+                raise
+            except _TRANSIENT_HTTPX as e:
+                last = e
+                plog_info("llm", "chat Ollama 连接失败（尝试 %s/%s）: %s", attempt + 1, _LLM_CONNECT_RETRIES, e)
+                if attempt + 1 < _LLM_CONNECT_RETRIES:
+                    await _async_backoff(attempt)
+                    continue
+        raise LLMConnectionError(
+            _connect_error_message(
+                last or RuntimeError("unknown"),
+                provider="ollama",
+                base_url=settings.ollama_base_url,
+                model=settings.ollama_chat_model,
+            )
+        ) from last
 
     async def chat_stream(self, messages: list[dict[str, str]], temperature: float = 0.2) -> AsyncIterator[str]:
-        """流式输出模型增量文本（OpenAI / Ollama）。"""
+        """流式输出模型增量文本（OpenAI / Ollama / Transformers OpenScholar）。"""
         use_openai = _use_openai_chat()
-        plog_info("llm", "chat_stream 开始 provider=%s", "openai" if use_openai else "ollama")
+        use_transformers = _use_transformers_chat()
+        plog_info("llm", "chat_stream 开始 provider=%s", _chat_provider_name())
         t0 = time.monotonic()
         nchars = 0
+        if use_transformers:
+            from app.services.openscholar_chat import chat_transformers_stream
+
+            async for piece in chat_transformers_stream(messages, temperature):
+                nchars += len(piece)
+                yield piece
+            plog_info("llm", "chat_stream 结束 耗时=%.2fs 累计字符=%s", time.monotonic() - t0, nchars)
+            return
         if use_openai:
             _require_openai("对话流式")
             base = settings.openai_api_base.rstrip("/")
@@ -142,23 +232,59 @@ class LLMClient:
             "stream": True,
             "options": {"temperature": temperature},
         }
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            async with client.stream("POST", url, json=payload) as r:
-                r.raise_for_status()
-                async for line in r.aiter_lines():
-                    line = (line or "").strip()
-                    if not line:
-                        continue
-                    try:
-                        obj = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    msg = obj.get("message") or {}
-                    piece = msg.get("content") or ""
-                    if piece:
-                        nchars += len(piece)
-                        yield piece
-        plog_info("llm", "chat_stream 结束 耗时=%.2fs 累计字符=%s", time.monotonic() - t0, nchars)
+        last: BaseException | None = None
+        for attempt in range(_LLM_CONNECT_RETRIES):
+            try:
+                async with httpx.AsyncClient(timeout=300.0) as client:
+                    async with client.stream("POST", url, json=payload) as r:
+                        r.raise_for_status()
+                        async for line in r.aiter_lines():
+                            line = (line or "").strip()
+                            if not line:
+                                continue
+                            try:
+                                obj = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            msg = obj.get("message") or {}
+                            piece = msg.get("content") or ""
+                            if piece:
+                                nchars += len(piece)
+                                yield piece
+                plog_info("llm", "chat_stream 结束 耗时=%.2fs 累计字符=%s", time.monotonic() - t0, nchars)
+                return
+            except httpx.HTTPStatusError as e:
+                if _http_status_retryable(e.response.status_code) and attempt + 1 < _LLM_CONNECT_RETRIES:
+                    plog_info(
+                        "llm",
+                        "chat_stream Ollama HTTP %s（尝试 %s/%s）",
+                        e.response.status_code,
+                        attempt + 1,
+                        _LLM_CONNECT_RETRIES,
+                    )
+                    await _async_backoff(attempt)
+                    continue
+                raise
+            except _TRANSIENT_HTTPX as e:
+                last = e
+                plog_info(
+                    "llm",
+                    "chat_stream Ollama 连接失败（尝试 %s/%s）: %s",
+                    attempt + 1,
+                    _LLM_CONNECT_RETRIES,
+                    e,
+                )
+                if attempt + 1 < _LLM_CONNECT_RETRIES:
+                    await _async_backoff(attempt)
+                    continue
+        raise LLMConnectionError(
+            _connect_error_message(
+                last or RuntimeError("unknown"),
+                provider="ollama",
+                base_url=settings.ollama_base_url,
+                model=settings.ollama_chat_model,
+            )
+        ) from last
 
 
 class EmbeddingClient:
