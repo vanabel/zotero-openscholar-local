@@ -13,5 +13,6 @@ apps/web/tsconfig.tsbuildinfo
 .env
 apps/api/.env
 apps/web/.env.local
+apps/api/.env.hpc
 # MinerU 云解析断点目录
 **/parsed/**/_mineru_cloud_chunks/
