@@ -10,6 +10,7 @@
 | [API.md](./API.md) | HTTP API 参考 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 开发、测试、CI、PM2 |
 | [OPERATIONS.md](./OPERATIONS.md) | 数据目录、备份恢复、SQLite 维护 |
+| [HPC.md](./HPC.md) | SLURM 超算批量 OpenScholar 向量（`scholar_embed_batch`） |
 | [QUALITY_BASELINE.md](./QUALITY_BASELINE.md) | P0 回归 fixture 与 P3/P4 评测占位 |
 
 维护约定：实现功能时同步更新 **ROADMAP** 状态、根 **README** 功能表、`apps/api/.env.example` 与 **API.md** / **ARCHITECTURE.md** 等本目录章节。

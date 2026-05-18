@@ -56,6 +56,32 @@ def test_get_task_stats_aggregates(tmp_path, monkeypatch):
     assert stats["failed_samples"][0]["error"] == "文献不存在"
 
 
+def test_get_task_stats_by_kind_parse_only(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    init_db()
+    now = _utc_now()
+    with get_db() as conn:
+        conn.execute("DELETE FROM tasks")
+        conn.execute(
+            """
+            INSERT INTO tasks(
+              id, task_type, paper_id, status, payload_json, created_at, updated_at
+            ) VALUES (?,?,?,?,?,?,?)
+            """,
+            ("tp1", "index", "p1", "queued", '{"parse_only": true}', now, now),
+        )
+        conn.execute(
+            """
+            INSERT INTO tasks(
+              id, task_type, paper_id, status, payload_json, created_at, updated_at
+            ) VALUES (?,?,?,?,?,?,?)
+            """,
+            ("ti1", "index", "p2", "completed", '{"force": false}', now, now),
+        )
+    stats = get_task_stats(failed_limit=0)
+    assert {r["kind"]: r["count"] for r in stats["by_kind"]} == {"parse": 1, "index": 1}
+
+
 def test_cancel_all_queued_reverts_indexing_paper(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
     init_db()

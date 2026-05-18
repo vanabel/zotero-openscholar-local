@@ -14,6 +14,7 @@ class BatchIndexBody(BaseModel):
     paper_ids: list[str] = Field(..., min_length=1, max_length=BATCH_INDEX_MAX_IDS)
     force: bool = False
     reindex_only: bool = False
+    parse_only: bool = False
 
 
 class MissingBatchQuery(BaseModel):
@@ -97,7 +98,12 @@ async def index_batch(
 
         results: list[dict] = []
         for paper_id in body.paper_ids:
-            res = await index_paper(paper_id, force=body.force, reindex_only=body.reindex_only)
+            res = await index_paper(
+                paper_id,
+                force=body.force,
+                reindex_only=body.reindex_only,
+                parse_only=body.parse_only,
+            )
             results.append({"paper_id": paper_id, **res})
         ok_n = sum(1 for r in results if r.get("ok"))
         return {
@@ -113,6 +119,7 @@ async def index_batch(
         body.paper_ids,
         force=body.force,
         reindex_only=body.reindex_only,
+        parse_only=body.parse_only,
     )
     errors = [t for t in tasks if t.get("error")]
     return JSONResponse(
@@ -143,14 +150,14 @@ async def index_missing(body: MissingBatchQuery = MissingBatchQuery()):
 
 @router.post("/parse-missing")
 async def parse_missing(body: MissingBatchQuery = MissingBatchQuery()):
-    """为尚无 document.md 的文献批量入队索引（将触发 MinerU / pypdf 解析）。"""
+    """为尚无 document.md 的文献批量入队**仅解析**（MinerU / pypdf → parsed/，不分块、不嵌入）。"""
     from app.services.paper_batch import batch_enqueue_response, list_parse_missing_ids
     from app.services.task_queue import enqueue_index_batch
 
     ids = list_parse_missing_ids(limit=body.limit)
     if not ids:
         return JSONResponse(status_code=200, content={"ok": True, "matched": 0, "queued": 0, "failed": 0})
-    tasks = enqueue_index_batch(ids, force=body.force, reindex_only=False)
+    tasks = enqueue_index_batch(ids, force=body.force, parse_only=True)
     return JSONResponse(status_code=202, content=batch_enqueue_response(tasks, matched=len(ids)))
 
 
@@ -437,24 +444,50 @@ async def reindex_only_one(
     return await index_one(paper_id, force=False, reindex_only=True, wait=wait)
 
 
+@router.post("/{paper_id}/parse")
+async def parse_one_paper(
+    paper_id: str,
+    force: bool = Query(False, description="强制重新解析 PDF"),
+    wait: bool = Query(False, description="为 true 时同步等待完成（脚本/调试）"),
+):
+    """仅解析 PDF → data/parsed/{id}/document.md，不分块、不嵌入。"""
+    return await index_one(paper_id, force=force, parse_only=True, wait=wait)
+
+
 @router.post("/{paper_id}/index")
 async def index_one(
     paper_id: str,
     force: bool = Query(False),
     reindex_only: bool = Query(False, description="仅重建分块/FTS/嵌入，复用 data/parsed 下 Markdown，不跑 MinerU"),
+    parse_only: bool = Query(False, description="仅解析 PDF，写入 parsed/，不分块/嵌入"),
     wait: bool = Query(False, description="为 true 时同步等待完成（脚本/调试）"),
 ):
+    if parse_only and reindex_only:
+        raise HTTPException(status_code=400, detail="parse_only 与 reindex_only 不能同时使用")
     if wait:
         from app.services.indexing import index_paper
 
-        res = await index_paper(paper_id, force=force, reindex_only=reindex_only)
+        res = await index_paper(
+            paper_id,
+            force=force,
+            reindex_only=reindex_only,
+            parse_only=parse_only,
+        )
         if not res.get("ok"):
-            raise HTTPException(status_code=400, detail=res.get("error", "索引失败"))
+            raise HTTPException(
+                status_code=400,
+                detail=res.get("error", "解析失败" if parse_only else "索引失败"),
+            )
         return res
 
     from app.services.task_queue import enqueue_index_task
 
-    info = enqueue_index_task(paper_id, force=force, reindex_only=reindex_only)
+    info = enqueue_index_task(
+        paper_id,
+        force=force,
+        reindex_only=reindex_only,
+        parse_only=parse_only,
+    )
     if info.get("error"):
         raise HTTPException(status_code=400, detail=info["error"])
     return JSONResponse(

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api";
+import { labelTaskKind } from "@/lib/taskKind";
 
 export type TaskStatsResponse = {
   total: number;
@@ -10,20 +11,18 @@ export type TaskStatsResponse = {
   by_status: { status: string; count: number }[];
   by_type: { task_type: string; count: number }[];
   by_type_status: { task_type: string; status: string; count: number }[];
+  by_kind?: { kind: string; count: number }[];
+  by_kind_status?: { kind: string; status: string; count: number }[];
   pending_range: { oldest: string | null; newest: string | null } | null;
   orphan_pending: number;
   failed_samples: {
     id: string;
     task_type: string;
+    kind?: string;
     paper_id: string | null;
     error: string;
     updated_at: string;
   }[];
-};
-
-const TASK_TYPE_LABEL: Record<string, string> = {
-  index: "索引",
-  summarize: "摘要",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -42,9 +41,12 @@ const STATUS_TONE: Record<string, string> = {
   cancelled: "text-ink-700 bg-mist-100",
 };
 
-function labelTaskType(t: string) {
-  return TASK_TYPE_LABEL[t] ?? t;
-}
+const KIND_TONE: Record<string, string> = {
+  parse: "text-teal-900 bg-teal-50",
+  reindex: "text-violet-900 bg-violet-50",
+  index: "text-ink-800 bg-mist-100",
+  summarize: "text-indigo-900 bg-indigo-50",
+};
 
 function labelStatus(s: string) {
   return STATUS_LABEL[s] ?? s;
@@ -60,10 +62,8 @@ function formatWhen(iso: string | null | undefined) {
 }
 
 type Props = {
-  /** 为 true 时每隔 intervalMs 自动刷新（无需展开面板） */
   autoRefresh?: boolean;
   intervalMs?: number;
-  /** 取消/清理队列后通知父组件刷新文献列表等 */
   onQueueChanged?: () => void;
 };
 
@@ -106,6 +106,23 @@ export function TaskStatsPanel({
   const queuedCount =
     stats?.by_status.find((r) => r.status === "queued")?.count ?? 0;
   const orphanPending = stats?.orphan_pending ?? 0;
+
+  const kindRows =
+    stats?.by_kind && stats.by_kind.length > 0
+      ? stats.by_kind
+      : (stats?.by_type ?? []).map((r) => ({
+          kind: r.task_type,
+          count: r.count,
+        }));
+
+  const kindStatusRows =
+    stats?.by_kind_status && stats.by_kind_status.length > 0
+      ? stats.by_kind_status
+      : (stats?.by_type_status ?? []).map((r) => ({
+          kind: r.task_type,
+          status: r.status,
+          count: r.count,
+        }));
 
   async function runAction(
     label: string,
@@ -231,10 +248,11 @@ export function TaskStatsPanel({
                   }))}
                 />
                 <StatsTable
-                  title="按类型"
-                  rows={stats.by_type.map((r) => ({
-                    key: r.task_type,
-                    col1: labelTaskType(r.task_type),
+                  title="按任务类型"
+                  rows={kindRows.map((r) => ({
+                    key: r.kind,
+                    col1: labelTaskKind(r.kind),
+                    col1Tone: KIND_TONE[r.kind],
                     count: r.count,
                   }))}
                 />
@@ -252,9 +270,9 @@ export function TaskStatsPanel({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-mist-100">
-                      {stats.by_type_status.map((r) => (
-                        <tr key={`${r.task_type}-${r.status}`}>
-                          <td className="px-3 py-2">{labelTaskType(r.task_type)}</td>
+                      {kindStatusRows.map((r) => (
+                        <tr key={`${r.kind}-${r.status}`}>
+                          <td className="px-3 py-2">{labelTaskKind(r.kind)}</td>
                           <td className="px-3 py-2">
                             <span
                               className={`inline-block rounded px-1.5 py-0.5 ${STATUS_TONE[r.status] ?? "bg-mist-100"}`}
@@ -277,7 +295,7 @@ export function TaskStatsPanel({
                     {stats.failed_samples.map((f) => (
                       <li key={f.id} className="rounded-lg border border-red-100 bg-red-50/50 px-2.5 py-2">
                         <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-ink-700">
-                          <span>{labelTaskType(f.task_type)}</span>
+                          <span>{labelTaskKind(f.kind ?? f.task_type)}</span>
                           <span className="text-ink-500">{formatWhen(f.updated_at)}</span>
                           {f.paper_id && (
                             <code className="text-[10px] text-ink-600">{f.paper_id.slice(0, 12)}…</code>
