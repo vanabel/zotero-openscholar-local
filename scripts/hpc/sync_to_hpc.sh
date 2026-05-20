@@ -18,15 +18,43 @@ fi
 : "${LOCAL_HF_CACHE:=${HOME}/.cache/huggingface}"
 : "${LOCAL_ZOTERO_STORAGE:=${HOME}/Zotero/storage}"
 : "${LOCAL_MINERU_MODELS:=${REPO_ROOT}/apps/api/data/mineru-models}"
+: "${LOCAL_MINERU_CONFIG:=${HOME}/mineru.json}"
+: "${REMOTE_MINERU_VLM_NAME:=MinerU2.5-Pro-2604-1.2B}"
+: "${REMOTE_MINERU_PIPELINE_NAME:=PDF-Extract-Kit-1.0}"
+: "${SYNC_RSYNC_PROGRESS:=1}"
 
-RSYNC=(rsync -az)
+# Mac 传入 LANG=C.UTF-8 时，超算未装该 locale 会导致 perl（rsync 远端）告警
+_HPC_SH_PREFIX='export LC_ALL=C LANG=C; unset LANGUAGE 2>/dev/null || true;'
+HPC_RSYNC_RSH="${REPO_ROOT}/scripts/hpc/hpc_rsync_rsh.sh"
+
+_init_rsync() {
+  if [[ ! -x "${HPC_RSYNC_RSH}" ]]; then
+    echo "缺少可执行 ${HPC_RSYNC_RSH}（chmod +x）" >&2
+    exit 1
+  fi
+  local args=(-az)
+  if [[ "${SYNC_RSYNC_PROGRESS}" == "1" ]]; then
+    # rsync 3.1+：单行总进度 + 速度；旧版（含 macOS 自带）回退 --progress
+    if rsync --info=progress2 --dry-run -a /dev/null /dev/null >/dev/null 2>&1; then
+      args+=(--info=progress2 --stats)
+    else
+      args+=(--progress --stats)
+    fi
+  fi
+  RSYNC=(rsync "${args[@]}" -e "${HPC_RSYNC_RSH}")
+}
+_init_rsync
+
+_hpc_ssh() {
+  ssh "${HPC_SSH}" "${_HPC_SH_PREFIX} $*"
+}
 
 _resolve_remote_home() {
   if [[ -n "${HPC_REMOTE_HOME:-}" ]]; then
     printf '%s' "${HPC_REMOTE_HOME}"
     return
   fi
-  ssh "${HPC_SSH}" 'printf %s "$HOME"'
+  ssh "${HPC_SSH}" "${_HPC_SH_PREFIX} sh -c 'printf %s \"\$HOME\"'"
 }
 
 _remote_repo() {
@@ -89,7 +117,7 @@ _sync_model_subdir() {
     return 0
   fi
   echo "=== rsync ${name} → ${HPC_SSH}:${dst_root}/${name}/ ==="
-  ssh "${HPC_SSH}" "mkdir -p '${dst_root}/${name}'"
+  _hpc_ssh "mkdir -p '${dst_root}/${name}'"
   "${RSYNC[@]}" "${src}/" "${HPC_SSH}:${dst_root}/${name}/"
 }
 
@@ -97,7 +125,7 @@ _sync_code() {
   local remote
   remote="$(_remote_repo)"
   echo "=== rsync 仓库 → ${HPC_SSH}:${remote}/ ==="
-  ssh "${HPC_SSH}" "mkdir -p '${remote}'"
+  _hpc_ssh "mkdir -p '${remote}'"
   "${RSYNC[@]}" \
     --exclude '.venv' \
     --exclude 'node_modules' \
@@ -126,7 +154,7 @@ _sync_data() {
   remote="$(_remote_repo)"
   data_dir="${remote}/apps/api/data"
   echo "=== rsync app.sqlite + parsed/ → ${HPC_SSH}:${data_dir}/ ==="
-  ssh "${HPC_SSH}" "mkdir -p '${data_dir}/parsed'"
+  _hpc_ssh "mkdir -p '${data_dir}/parsed'"
   if [[ -f "${REPO_ROOT}/apps/api/data/app.sqlite" ]]; then
     "${RSYNC[@]}" "${REPO_ROOT}/apps/api/data/app.sqlite" "${HPC_SSH}:${data_dir}/"
   else
@@ -146,7 +174,7 @@ _sync_pdfs() {
   fi
   echo "=== rsync Zotero storage → ${HPC_SSH}:${remote_storage}/ ==="
   echo "（仅 PDF；体积大时可多次增量同步）"
-  ssh "${HPC_SSH}" "mkdir -p '${remote_storage}'"
+  _hpc_ssh "mkdir -p '${remote_storage}'"
   "${RSYNC[@]}" \
     --include '*/' \
     --include '*.pdf' \
@@ -158,23 +186,97 @@ _sync_pdfs() {
   echo "  ZOTERO_STORAGE_PATH=${remote_storage}"
 }
 
+_mineru_models_from_config() {
+  local cfg="$1"
+  if [[ ! -f "${cfg}" ]]; then
+    return 1
+  fi
+  MINERU_CFG="${cfg}" python3 - <<'PY'
+import json, os, shlex
+from pathlib import Path
+cfg = Path(os.environ["MINERU_CFG"])
+data = json.loads(cfg.read_text(encoding="utf-8"))
+models = data.get("models-dir") or {}
+vlm = (models.get("vlm") or "").strip()
+pipe = (models.get("pipeline") or "").strip()
+if vlm:
+    print(f"MINERU_VLM_SRC={shlex.quote(vlm)}")
+if pipe:
+    print(f"MINERU_PIPE_SRC={shlex.quote(pipe)}")
+PY
+}
+
+_sync_one_mineru_model_dir() {
+  local src="$1" remote_name="$2" data_dir="$3"
+  if [[ -z "${src}" ]] || [[ ! -d "${src}" ]]; then
+    echo "跳过 ${remote_name}：本地目录不存在: ${src:-<empty>}" >&2
+    return 1
+  fi
+  echo "  ${src} → ${data_dir}/${remote_name}/"
+  _hpc_ssh "mkdir -p '${data_dir}/${remote_name}'"
+  "${RSYNC[@]}" "${src}/" "${HPC_SSH}:${data_dir}/${remote_name}/"
+}
+
 _sync_mineru_models() {
-  local remote data_dir
+  local remote data_dir cfg_remote
   remote="$(_remote_repo)"
   data_dir="${remote}/apps/api/data/mineru-models"
-  if [[ ! -d "${LOCAL_MINERU_MODELS}" ]]; then
-    echo "跳过 mineru-models：本地无 ${LOCAL_MINERU_MODELS}" >&2
-    echo "  请先: pnpm run download:mineru-models" >&2
-    exit 1
+  cfg_remote="${remote}/apps/api/config/mineru.hpc.json"
+  _hpc_ssh "mkdir -p '${data_dir}'"
+
+  local use_repo_models=0
+  local vlm_local="${LOCAL_MINERU_MODELS}/${REMOTE_MINERU_VLM_NAME}"
+  # Mac 上 pnpm download:mineru-models --link 会得到指向本机 ModelScope 的符号链接，不可 rsync 到超算
+  if [[ -L "${vlm_local}" ]]; then
+    echo "注意：${vlm_local} 为符号链接，改从 ${LOCAL_MINERU_CONFIG} 同步实体文件" >&2
+  elif [[ -f "${LOCAL_MINERU_MODELS}/config.json" ]]; then
+    use_repo_models=1
+  elif [[ -e "${vlm_local}/config.json" ]]; then
+    use_repo_models=1
   fi
-  echo "=== rsync MinerU 权重 → ${HPC_SSH}:${data_dir}/ ==="
-  ssh "${HPC_SSH}" "mkdir -p '${data_dir}'"
-  "${RSYNC[@]}" "${LOCAL_MINERU_MODELS}/" "${HPC_SSH}:${data_dir}/"
+  if [[ "${use_repo_models}" == "1" ]]; then
+    echo "=== rsync MinerU 权重（仓库 data/mineru-models，实体目录）→ ${HPC_SSH}:${data_dir}/ ==="
+    "${RSYNC[@]}" "${LOCAL_MINERU_MODELS}/" "${HPC_SSH}:${data_dir}/"
+  else
+    local cfg="${LOCAL_MINERU_CONFIG}"
+    echo "=== rsync MinerU 权重（${cfg} models-dir）→ ${HPC_SSH}:${data_dir}/ ==="
+    if [[ ! -f "${cfg}" ]]; then
+      echo "跳过 mineru-models：无 ${LOCAL_MINERU_MODELS} 且无 ${cfg}" >&2
+      echo "  可选: pnpm run download:mineru-models" >&2
+      echo "  或配置 LOCAL_MINERU_CONFIG 指向 ~/mineru.json（见 sync_to_hpc.env.example）" >&2
+      exit 1
+    fi
+    # shellcheck disable=SC1090
+    eval "$(_mineru_models_from_config "${cfg}")"
+    if [[ -z "${MINERU_VLM_SRC:-}" ]] && [[ -z "${MINERU_PIPE_SRC:-}" ]]; then
+      echo "跳过：${cfg} 中 models-dir 无 vlm/pipeline 路径" >&2
+      exit 1
+    fi
+    local ok=0
+    if [[ -n "${MINERU_VLM_SRC:-}" ]]; then
+      _sync_one_mineru_model_dir "${MINERU_VLM_SRC}" "${REMOTE_MINERU_VLM_NAME}" "${data_dir}" && ok=1
+    fi
+    if [[ -n "${MINERU_PIPE_SRC:-}" ]]; then
+      _sync_one_mineru_model_dir "${MINERU_PIPE_SRC}" "${REMOTE_MINERU_PIPELINE_NAME}" "${data_dir}" && ok=1
+    fi
+    if [[ "${ok}" -eq 0 ]]; then
+      exit 1
+    fi
+  fi
+
   echo ""
-  echo "建议：复制 scripts/hpc/mineru.json.hpc.example → apps/api/config/mineru.hpc.json 并改绝对路径"
+  echo "建议在超算 apps/api/config/mineru.hpc.json（models-dir 示例）："
+  echo "  \"vlm\": \"${data_dir}/${REMOTE_MINERU_VLM_NAME}\""
+  echo "  \"pipeline\": \"${data_dir}/${REMOTE_MINERU_PIPELINE_NAME}\""
+  echo ""
+  echo "apps/api/.env.hpc："
   echo "  MINERU_MODEL_SOURCE=local"
-  echo "  MINERU_TOOLS_CONFIG_JSON=${remote}/apps/api/config/mineru.hpc.json"
-  echo "  MINERU_CLI=${remote}/apps/api/.venv/bin/mineru"
+  echo "  MINERU_TOOLS_CONFIG_JSON=${cfg_remote}"
+  echo "  MINERU_CLI=${remote}/apps/api/.venv/bin/mineru   # 超算 Linux venv，勿 rsync Mac MinerU/.venv"
+  if [[ -n "${LOCAL_MINERU_CLI:-}" ]]; then
+    echo ""
+    echo "（Mac 本机 CLI 参考: ${LOCAL_MINERU_CLI}）"
+  fi
 }
 
 _sync_models() {
@@ -189,7 +291,7 @@ _sync_models() {
     hf_remote="$(_remote_hf_home)"
     if [[ -d "${LOCAL_HF_CACHE}" ]]; then
       echo "=== rsync Hugging Face 缓存 → ${HPC_SSH}:${hf_remote}/ ==="
-      ssh "${HPC_SSH}" "mkdir -p '${hf_remote}'"
+      _hpc_ssh "mkdir -p '${hf_remote}'"
       "${RSYNC[@]}" "${LOCAL_HF_CACHE}/" "${HPC_SSH}:${hf_remote}/"
     else
       echo "跳过 HF 缓存：本地无 ${LOCAL_HF_CACHE}" >&2
@@ -229,7 +331,7 @@ _usage() {
   code          同步仓库（排除 .venv、data、node_modules）
   data          同步 app.sqlite 与 data/parsed/
   pdfs          同步 Zotero storage 下 PDF（见 LOCAL_ZOTERO_STORAGE）
-  mineru-models 同步 apps/api/data/mineru-models（MinerU 本地权重）
+  mineru-models 同步 MinerU 权重（data/mineru-models 或 ~/mineru.json models-dir）
   models        同步 openscholar-retriever（SYNC_RERANKER=1 时含 reranker）
   env           上传 apps/api/.env.hpc（勿提交 git）
   all           依次 code → data → pdfs → mineru-models → models → env

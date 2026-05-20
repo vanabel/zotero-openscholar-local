@@ -1,4 +1,6 @@
 import json
+import os
+import time
 from contextlib import contextmanager
 
 try:
@@ -12,10 +14,16 @@ from app.config import settings
 
 def _connect() -> sqlite3.Connection:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(settings.db_path, check_same_thread=False)
+    timeout_sec = float(os.environ.get("SQLITE_BUSY_TIMEOUT_SEC", "120"))
+    conn = sqlite3.connect(settings.db_path, timeout=timeout_sec, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute(f"PRAGMA busy_timeout = {int(timeout_sec * 1000)};")
     return conn
+
+
+def _is_database_locked(exc: Exception) -> bool:
+    return "database is locked" in str(exc).lower()
 
 
 @contextmanager
@@ -23,7 +31,16 @@ def get_db():
     conn = _connect()
     try:
         yield conn
-        conn.commit()
+        retries = int(os.environ.get("SQLITE_COMMIT_RETRIES", "6"))
+        delay = float(os.environ.get("SQLITE_COMMIT_RETRY_DELAY_SEC", "1.0"))
+        for attempt in range(retries + 1):
+            try:
+                conn.commit()
+                break
+            except sqlite3.OperationalError as e:
+                if attempt >= retries or not _is_database_locked(e):
+                    raise
+                time.sleep(delay * (attempt + 1))
     finally:
         conn.close()
 

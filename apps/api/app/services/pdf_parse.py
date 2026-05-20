@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -170,6 +171,11 @@ def parse_one(
         if api_url:
             tail.extend(["--api-url", api_url])
             meta["mineru_api_url"] = api_url
+        extra_args = (settings.mineru_cli_extra_args or "").strip()
+        if extra_args:
+            extra_tail = shlex.split(extra_args)
+            tail.extend(extra_tail)
+            meta["mineru_cli_extra_args"] = extra_tail
         cmd = _mineru_command(mineru_bin, tail)
         meta["mineru_task_poll_interval_sec"] = settings.mineru_task_poll_interval_sec
         plog_info(
@@ -220,7 +226,8 @@ def parse_one(
         md_path = _find_markdown(out_dir)
         if md_path and md_path.exists():
             md = md_path.read_text(encoding="utf-8", errors="replace")
-            if len(md.strip()) >= 100:
+            _looks_like_pypdf_fail = "提取失败" in md and "无法从 PDF 读取文本" in md
+            if len(md.strip()) >= 100 and not _looks_like_pypdf_fail:
                 if result.returncode != 0:
                     meta["mineru_exit_code"] = result.returncode
                     meta["mineru_log_tail"] = clip(log_blob, 6000)

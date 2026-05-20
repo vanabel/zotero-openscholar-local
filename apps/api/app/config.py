@@ -131,6 +131,8 @@ class Settings(BaseSettings):
     mineru_cli_style: str = Field(default="v3", validation_alias="MINERU_CLI_STYLE")
     # 若已常驻 mineru-api，填写其 base URL，解析时将附带 --api-url（省略则由 CLI 每次起临时服务）
     mineru_api_url: str | None = Field(default=None, validation_alias="MINERU_API_URL")
+    # 追加传给 MinerU CLI 的参数，例如：--backend vlm-auto-engine --source local
+    mineru_cli_extra_args: str | None = Field(default=None, validation_alias="MINERU_CLI_EXTRA_ARGS")
     # MinerU 子进程环境：设为 local 时需配置 models-dir（见 config/mineru.json.example 与 scripts/download_mineru_local_models.py）
     mineru_model_source: str | None = Field(default=None, validation_alias="MINERU_MODEL_SOURCE")
     # 指向 mineru.json 绝对路径；不设则 MinerU 默认读 ~/.mineru.json 或 ~/mineru.json（见 MinerU 的 MINERU_TOOLS_CONFIG_JSON）

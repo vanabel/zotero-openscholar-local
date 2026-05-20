@@ -51,7 +51,8 @@ cp apps/web/.env.example apps/web/.env.local   # 可选
 - `MINERU_MODEL_SOURCE=local` + `MINERU_TOOLS_CONFIG_JSON`：本地权重  
 
 ```bash
-pnpm run download:mineru-models   # 或 mineru-models-download
+pnpm run download:mineru-models   # 默认从 ~/mineru.json 符号链接；`:copy` 为物理复制
+# pnpm run download:mineru-models:hf   # 无本地权重时才从 Hugging Face 下载
 ```
 
 ## 任务 Worker

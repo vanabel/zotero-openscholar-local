@@ -1,8 +1,8 @@
 # 超算（SLURM）批量向量：分块 + 双嵌入
 
-适合 **Mac 本地只解析 PDF**（`document.md`），在 **GPU 集群**上完成分块、`embedding_json`（OpenAI 兼容 API，**无 Ollama**）与 `scholar_embedding_json`（OpenScholar Retriever / CUDA）。
+适合 **Mac 本地已解析 PDF**（`document.md`），在 **GPU 集群**上完成分块、`embedding_json`（OpenAI 兼容 API，**无 Ollama**）与 `scholar_embedding_json`（OpenScholar Retriever / CUDA）。
 
-若希望 **PDF 也 rsync 上超算、在集群跑 MinerU 再向量**，见专文 **[HPC_PARSE.md](./HPC_PARSE.md)**（`sync_to_hpc.sh pdfs`、`submit_parse*.slurm`、`parse_batch.py`）。
+若希望 **PDF 也 rsync 上超算、在 swu3 用本地 MinerU CLI + 本地权重解析再向量**，见专文 **[HPC_PARSE.md](./HPC_PARSE.md)**（`sync_to_hpc.sh pdfs`、`sync_to_hpc.sh mineru-models`、`submit_parse.swu.slurm`）。
 
 调度器：**SLURM**。通用脚本：`scripts/hpc/submit_vectors.slurm`；西南大学 GridView 集群见下文 **SWU** 专节。
 
@@ -70,11 +70,13 @@ cp apps/api/.env.hpc.example apps/api/.env.hpc
 | `models` | `openscholar-retriever`（`SYNC_RERANKER=1` 时含 `openscholar-reranker`） |
 | `env` | 本地 `apps/api/.env.hpc`（含密钥，勿提交 git） |
 
+`sync_to_hpc.local.env` 中 **`SYNC_RSYNC_PROGRESS=1`**（默认）时，rsync 会显示总进度、传输速度与结束 `--stats`；设为 `0` 可静默。
+
 `models` 完成后脚本会打印建议在 **`.env.hpc`** 中填写的超算绝对路径。本地权重目录需为标准 HF 布局（`config.json` + `model.safetensors` 或分片），与 Mac 上 `~/models/openscholar-retriever` 一致。
 
 可选：在 `sync_to_hpc.local.env` 设 `SYNC_HF_CACHE=1`，同步整个 `~/.cache/huggingface`（体积大，仅出网极差时用）。
 
-**不必同步**：Ollama GGUF、对话 8B（`openscholar-ms-8b`）、MinerU 权重——超算批处理不调用；普通嵌入走 `OPENAI_*` API。
+**不必同步**（仅向量、Mac 已解析时）：Ollama GGUF、对话 8B、MinerU。若要在超算跑 MinerU 解析，见 [HPC_PARSE.md](./HPC_PARSE.md)（`mineru-models` 可从 `~/mineru.json` 同步）。
 
 ### 2. 登录节点：模块 + venv + pip
 
@@ -116,6 +118,10 @@ cd ~/zotero-openscholar-local
 # 全库（默认只补缺失：MISSING_ONLY=1）
 sbatch scripts/hpc/submit_vectors.swu.slurm
 
+# 若计算节点无外网 DNS，submit_vectors 会跳过 embedding_json；
+# 在 swu3 登录节点单独补普通 OpenAI 兼容 embedding：
+bash scripts/hpc/run_embed_login.swu.sh
+
 # 冒烟：单篇（parsed 下目录取 paper_id）
 sbatch --export=ALL,PAPER_IDS=<paper_id>,MISSING_ONLY=0 \
   scripts/hpc/submit_vectors.swu.slurm
@@ -131,25 +137,78 @@ sbatch --export=ALL,PAPER_IDS=<paper_id>,FORCE=1,MISSING_ONLY=0 \
 | `MISSING_ONLY` | `1` | 仅补缺失 chunk/向量 |
 | `FORCE` | `0` | `1` 强制重算 |
 | `RUN_CHUNK` / `RUN_EMBED` / `RUN_SCHOLAR` | `1` | 可设 `0` 跳过某步 |
+| `SKIP_EMBED_IF_NO_DNS` | `1` | SWU 计算节点无法解析 `OPENAI_API_BASE` 时跳过 `embed_batch`，继续跑 scholar |
 | `DATA_DIR` | `$REPO/apps/api/data` | 与 `.env.hpc` 一致 |
 
 日志：`~/zotero-openscholar-local/zos_vectors_<jobid>.log` / `.err`；队列：`squeue -u $USER`。
 
-### 4. 回传 Mac
+### 4. SLURM 常用命令（SWU）
 
 ```bash
-rsync -avz swu3:~/zotero-openscholar-local/apps/api/data/app.sqlite ./apps/api/data/
-rsync -avz swu3:~/zotero-openscholar-local/apps/api/data/lance/ ./apps/api/data/lance/
+# 让当前 shell 找到 sbatch / squeue / scancel
+export PATH=/opt/gridview/slurm/bin:$PATH
+
+# 提交作业
+sbatch scripts/hpc/submit_vectors.swu.slurm
+sbatch --export=ALL,PAPER_IDS=<paper_id>,MISSING_ONLY=0 scripts/hpc/submit_vectors.swu.slurm
+
+# 并行提交解析分片（多个单卡作业，推荐用于大量 PDF）
+PARSE_SHARDS=auto bash scripts/hpc/submit_parse_shards.swu.sh
+
+# 解析成功后再自动提交向量（jobid 替换为 parse 作业号）
+sbatch --dependency=afterok:<jobid> scripts/hpc/submit_vectors.swu.slurm
+
+# 查看队列 / 自己的作业 / 指定作业
+squeue
+squeue -u $USER
+squeue -j <jobid>
+
+# 查看作业详情（分区、节点、GPU 申请、退出状态）
+scontrol show job <jobid>
+scontrol show job <jobid> | grep -E "JobState|Partition|NodeList|Gres|TRES|Reason"
+
+# 查看日志（仓库根目录）
+tail -f zos_vectors_<jobid>.log
+tail -f zos_vectors_<jobid>.err
+
+# 取消作业
+scancel <jobid>
+scancel -u $USER
+
+# 查看历史记账（若集群开启 sacct）
+sacct -j <jobid> --format=JobID,JobName,Partition,State,Elapsed,AllocTRES,MaxRSS
+
+# 查看节点 / 分区（权限允许时）
+sinfo
+sinfo -p gpu_4090
+scontrol show partition gpu_4090
 ```
+
+常见状态：`PD` 排队、`R` 运行、`CG` 收尾、`CD` 完成、`F` 失败、`CA` 已取消。GridView 页面显示“完成”时，也建议看 `.err` 是否为空以及 `.log` 末尾是否有脚本自己的完成提示。
+
+### 5. 回传 Mac
+
+```bash
+pnpm run hpc:pull:sqlite   # app.sqlite
+pnpm run hpc:pull:lance    # lance/
+# 若在超算解析过，另拉 parsed/：pnpm run hpc:pull:parsed
+```
+
+脚本 `scripts/hpc/sync_from_hpc.sh` 优先 **Homebrew** `/opt/homebrew/bin/rsync`（`--info=progress2`）；仅 macOS openrsync 时回退 `--progress`。见 [HPC_PARSE.md](./HPC_PARSE.md) §4。
 
 ### SWU 相关脚本
 
 | 文件 | 用途 |
 |------|------|
 | `scripts/hpc/sync_to_hpc.sh` | Mac → 超算：`code` / `data` / `models` / `env` / `all` |
+| `scripts/hpc/sync_from_hpc.sh` | 超算 → Mac：`parsed` / `sqlite` / `lance` / `all`（`pnpm run hpc:pull:*`） |
 | `scripts/hpc/sync_to_hpc.env.example` | 同步配置模板 → 复制为 `sync_to_hpc.local.env` |
 | `scripts/hpc/swu_modules.sh` | `module load` Python/CUDA + SLURM `PATH` |
 | `scripts/hpc/swu_pip_install.sh` | 登录节点无代理安装 `.venv` |
+| `scripts/hpc/swu_pip_install_mineru.sh` | 安装 swu3 本地 MinerU CLI 及 VLM 依赖 |
+| `scripts/hpc/test_mineru_cli.sh` | 检查 swu3 本地 MinerU CLI / 权重 / 配置 |
+| `scripts/hpc/run_embed_login.swu.sh` | 登录节点补 `embedding_json`（OpenAI 兼容 HTTP API） |
+| `scripts/hpc/submit_parse_shards.swu.sh` | 多个单卡作业并行跑 swu3 本地 MinerU 解析 |
 | `scripts/hpc/submit_vectors.swu.slurm` | SWU 分区 + 模块 + 三件套批处理 |
 
 解析 + 向量全流程脚本见 **[HPC_PARSE.md](./HPC_PARSE.md)**。
@@ -267,6 +326,7 @@ pnpm run hpc:vectors   # 本地调试：顺序执行上述三步（需 .env 配 
 | 现象 | 处理 |
 |------|------|
 | `embed 需要 EMBED_PROVIDER=openai` | 在 `.env.hpc` 设置并 `source` |
+| **`[Errno -2] Name or service not known`（embed_batch）** | SWU 登录节点能出网但计算节点不能解析外网 API；运行 `bash scripts/hpc/run_embed_login.swu.sh` 补 `embedding_json`，GPU 作业保留 `RUN_SCHOLAR=1` |
 | API 429 / 超时 | 减小 `embed_batch --batch-size`；检查配额 |
 | `无 chunk` | 先跑 `chunk_batch` 或检查 `parsed/` 是否同步 |
 | `PDF 文件不存在`（reindex） | 已支持「有 Markdown 无 PDF」；优先用三件套脚本 |
@@ -279,6 +339,10 @@ pnpm run hpc:vectors   # 本地调试：顺序执行上述三步（需 .env 配 
 | 登录节点 **`torch.cuda.is_available()` 为 False** | 正常；以计算节点 GPU 作业日志为准 |
 | **Retriever 在超算重新下载** | 在 `.env.hpc` 设 `OPENSCHOLAR_RETRIEVER_MODEL` 为 rsync 后的**超算路径**，勿保留 Mac 的 `/Users/...` |
 | `跳过 openscholar-retriever：未找到有效 HF 目录` | 本地 `~/models/openscholar-retriever` 缺权重；先在 Mac 下全再 `sync_to_hpc.sh models` |
+| **`perl: Setting locale failed`（rsync/ssh）** | `sync_to_hpc.sh` 经 `hpc_rsync_rsh.sh` 设 `LC_ALL=C`。`~/.bashrc` 须 **先判断文件存在** 再 `source`（见 `swu_locale.sh` 注释） |
+| **`env: swu3: No such file or directory`（rsync）** | macOS openrsync 勿用 `-e "ssh host env ..."`；已改为 `scripts/hpc/hpc_rsync_rsh.sh`。先 `sync_to_hpc.sh code` |
+| **mux / port 21087 / 11435 转发失败** | `~/.ssh/config` 里 `swu3` 的 `RemoteForward`/`LocalForward` 冲突；同步本身可忽略，或关掉无用转发、 `ssh -O exit swu3` 重建 ControlMaster |
+| **Mac 手敲 rsync 无进度 / `--info=progress2` 报错** | `/usr/bin/rsync` 为 openrsync，仅支持 `--progress`；`brew install rsync` 后用 `pnpm run hpc:pull:parsed`（自动优先 `/opt/homebrew/bin/rsync`） |
 
 ## 参考
 

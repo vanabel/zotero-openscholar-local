@@ -2,6 +2,10 @@
 # 用法：source scripts/hpc/swu_modules.sh
 # 查看可用：module avail apps/python apps/cuda
 
+_SWU_MOD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck disable=SC1091
+source "${_SWU_MOD_DIR}/swu_locale.sh"
+
 # SLURM（admin03 / ssh swu3；admin01 无 sbatch）
 export PATH=/opt/gridview/slurm/bin:${PATH}
 

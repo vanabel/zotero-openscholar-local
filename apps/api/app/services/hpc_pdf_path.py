@@ -40,7 +40,10 @@ def resolve_pdf_path(stored: str | Path) -> Path | None:
 
     key = extract_zotero_storage_key(str(p))
     if key:
-        root = get_zotero_storage_path()
+        # HPC jobs often use a Mac-synced app.sqlite whose app_settings still
+        # points to /Users/...; the job env must win on the cluster.
+        env_root = os.environ.get("ZOTERO_STORAGE_PATH", "").strip()
+        root = Path(env_root).expanduser() if env_root else get_zotero_storage_path()
         cand = root / key / p.name
         if cand.is_file():
             return cand.resolve()

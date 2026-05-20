@@ -6,6 +6,7 @@ set -euo pipefail
 REPO_ROOT="${REPO_ROOT:-${HOME}/zotero-openscholar-local}"
 API_DIR="${REPO_ROOT}/apps/api"
 ENV_FILE="${ENV_FILE:-${API_DIR}/.env.hpc}"
+export PYTHONPATH="${API_DIR}/scripts/mineru_shims:${PYTHONPATH:-}"
 
 if [[ -f "${ENV_FILE}" ]]; then
   set -a

@@ -25,6 +25,7 @@ source "${REPO_ROOT_EARLY}/scripts/hpc/swu_modules.sh"
 : "${MISSING_ONLY:=1}"
 : "${FORCE:=0}"
 : "${PAPER_IDS:=}"
+: "${SKIP_EMBED_IF_NO_DNS:=1}"
 
 mkdir -p "${HF_HOME}"
 export HF_HOME
@@ -63,6 +64,20 @@ fi
 echo "=== zos vectors (SWU) ==="
 echo "partition=${SLURM_JOB_PARTITION:-?} DATA_DIR=${DATA_DIR} PAPER_IDS=${PAPER_IDS:-<all>}"
 
+_openai_dns_ok() {
+  .venv/bin/python - <<'PY'
+import socket
+from urllib.parse import urlparse
+
+from app.config import settings
+
+host = urlparse(settings.openai_api_base).hostname
+if not host:
+    raise SystemExit(1)
+socket.getaddrinfo(host, 443)
+PY
+}
+
 if [[ "${RUN_CHUNK}" == "1" ]]; then
   echo "--- chunk_batch ---"
   .venv/bin/python scripts/chunk_batch.py "${COMMON[@]}"
@@ -73,8 +88,15 @@ if [[ "${RUN_EMBED}" == "1" ]]; then
     echo "embed 需要 EMBED_PROVIDER=openai 与 OPENAI_API_KEY" >&2
     exit 1
   fi
-  echo "--- embed_batch ---"
-  .venv/bin/python scripts/embed_batch.py "${COMMON[@]}"
+  if _openai_dns_ok; then
+    echo "--- embed_batch ---"
+    .venv/bin/python scripts/embed_batch.py "${COMMON[@]}"
+  elif [[ "${SKIP_EMBED_IF_NO_DNS}" == "1" ]]; then
+    echo "--- embed_batch: SKIP（计算节点无法解析 OPENAI_API_BASE；请在登录节点运行 scripts/hpc/run_embed_login.swu.sh）---" >&2
+  else
+    echo "计算节点无法解析 OPENAI_API_BASE；可设 RUN_EMBED=0 跳过，或在登录节点运行 scripts/hpc/run_embed_login.swu.sh" >&2
+    exit 2
+  fi
 fi
 
 if [[ "${RUN_SCHOLAR}" == "1" ]]; then

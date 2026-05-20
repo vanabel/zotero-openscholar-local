@@ -26,6 +26,22 @@ def test_resolve_via_storage_root(tmp_path, monkeypatch):
     assert resolved.resolve() == pdf.resolve()
 
 
+def test_resolve_env_storage_root_overrides_synced_db_setting(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    init_db()
+    set_zotero_storage_path(Path("/Users/me/Zotero/storage"))
+
+    storage = tmp_path / "hpc-zotero-storage"
+    key = "AbCd1234"
+    pdf = storage / key / "paper.pdf"
+    pdf.parent.mkdir(parents=True)
+    pdf.write_bytes(b"%PDF-1.4")
+    monkeypatch.setenv("ZOTERO_STORAGE_PATH", str(storage))
+
+    mac_path = f"/Users/me/Zotero/storage/{key}/paper.pdf"
+    assert resolve_pdf_path(mac_path) == pdf.resolve()
+
+
 def test_resolve_prefix_remap(tmp_path, monkeypatch):
     target = tmp_path / "mirror" / "KEY" / "a.pdf"
     target.parent.mkdir(parents=True)
