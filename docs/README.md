@@ -7,6 +7,7 @@
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 六层架构、数据流、与 OpenScholar 的关系 |
 | [ROADMAP.md](./ROADMAP.md) | 质量目标驱动的路线图（P0–P7） |
 | [CONFIGURATION.md](./CONFIGURATION.md) | 环境变量、模型、MinerU、日志 |
+| [FINETUNING.md](./FINETUNING.md) | OpenScholar Retriever/Reranker/Chat 下游微调（ModelScope、SiliconFlow） |
 | [API.md](./API.md) | HTTP API 参考 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 开发、测试、CI、PM2 |
 | [OPERATIONS.md](./OPERATIONS.md) | 数据目录、备份恢复、SQLite 维护 |

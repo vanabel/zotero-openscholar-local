@@ -38,6 +38,8 @@ cp apps/web/.env.example apps/web/.env.local   # 可选
 
 启用 Retriever 后需对文献**重新建立索引**以写入 `scholar_embedding_json`。
 
+启动时若出现 `pooler.dense.* | MISSING`，属 Contriever/BERT 双塔检索的正常现象（本仓库用 mean pooling，不用 pooler）；在自有数据上微调 Retriever/Reranker 见 [FINETUNING.md](./FINETUNING.md)。
+
 ## MinerU
 
 | 模式 | 配置 |
