@@ -6,7 +6,14 @@ from app.config import settings
 from app.db import get_db, init_db
 from app.services.indexing import index_paper
 from app.services.llm import EmbeddingClient
-from app.services.task_queue import enqueue_index_task, get_task, list_active_tasks, start_worker, stop_worker
+from app.services.task_queue import (
+    TaskProgress,
+    enqueue_index_task,
+    get_task,
+    list_active_tasks,
+    start_worker,
+    stop_worker,
+)
 
 
 def _utc_now() -> str:
@@ -45,6 +52,73 @@ def test_enqueue_dedupes_active_task(tmp_path, monkeypatch):
     assert a["task_id"] == b["task_id"]
     assert b.get("deduped") is True
     assert len(list_active_tasks()) == 1
+
+
+def test_task_progress_records_phase_history(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    init_db()
+    pid = "c" * 32
+    _insert_paper(tmp_path, pid)
+    enq = enqueue_index_task(pid, force=False)
+    task_id = enq["task_id"]
+    progress = TaskProgress(task_id)
+    progress.update("parse", 0, 1, "解析中")
+    progress.update("parse", 1, 1, "解析完成")
+    progress.update("chunk", 0, 1, "分块中")
+    t = get_task(task_id)
+    assert t is not None
+    hist = t["progress"]["phase_history"]
+    parse_hist = [h for h in hist if h["phase"] == "parse"]
+    assert len(parse_hist) == 1
+    assert parse_hist[0]["done"] == 1
+    assert parse_hist[0]["total"] == 1
+    assert t["progress"]["phase"] == "chunk"
+    assert t["progress"].get("phase_started_at")
+    assert t["progress"].get("task_started_at")
+    parse_hist = [h for h in t["progress"]["phase_history"] if h["phase"] == "parse"][0]
+    assert "duration_sec" in parse_hist
+
+
+def test_list_active_tasks_includes_paper_title(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    init_db()
+    pid = "b" * 32
+    _insert_paper(tmp_path, pid)
+    with get_db() as conn:
+        conn.execute("UPDATE papers SET title = ? WHERE id = ?", ("My Paper Title", pid))
+    enqueue_index_task(pid, force=False)
+    active = list_active_tasks(paper_ids=[pid])
+    assert len(active) == 1
+    assert active[0]["paper_title"] == "My Paper Title"
+
+
+def test_enqueue_replaces_queued_when_intent_differs(tmp_path, monkeypatch):
+    """排队中的「建立索引」与「仅 MinerU 下载重试」应替换为新任务，而非错误 dedupe。"""
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    init_db()
+    pid = "d" * 32
+    _insert_paper(tmp_path, pid)
+
+    first = enqueue_index_task(pid, force=False)
+    second = enqueue_index_task(pid, mineru_download_only=True)
+    assert first["task_id"] != second["task_id"]
+    assert second.get("deduped") is not True
+    active = list_active_tasks(paper_ids=[pid])
+    assert len(active) == 1
+    pl = active[0].get("payload") or {}
+    assert pl.get("mineru_download_only") is True
+
+
+def test_enqueue_dedupes_same_mineru_download_intent(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    init_db()
+    pid = "e" * 32
+    _insert_paper(tmp_path, pid)
+
+    a = enqueue_index_task(pid, mineru_download_only=True)
+    b = enqueue_index_task(pid, mineru_download_only=True)
+    assert a["task_id"] == b["task_id"]
+    assert b.get("deduped") is True
 
 
 async def _fake_embed(self, texts: list[str]) -> list[list[float]]:

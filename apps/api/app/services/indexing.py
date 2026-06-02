@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.db import get_db
-from app.pipeline_logging import plog_info
+from app.pipeline_logging import log_context, plog_info
 from app.services.clean_markdown import clean_markdown
 from app.services.chunk_quality import (
     classify_chunk_type,
@@ -28,6 +28,7 @@ from app.services.pdf_parse import (
     sha256_text,
 )
 from app.services.parse_retry import maybe_retry_low_quality_parse
+from app.services.mineru_cloud import ReportParseProgress
 from app.services.task_queue import TaskProgress
 from app.services.task_runtime import index_embed_semaphore, mineru_parse_semaphore
 from app.services.parse_outcome import summarize_parse_outcome
@@ -37,6 +38,16 @@ from app.services.zotero_scanner import get_paper
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_progress_reporter(progress: TaskProgress | None) -> ReportParseProgress | None:
+    if progress is None:
+        return None
+
+    def report(done: int, total: int, message: str) -> None:
+        progress.update("parse", done, max(total, 1), message)
+
+    return report
 
 
 def _parsed_dir(paper_id: str) -> Path:
@@ -148,21 +159,45 @@ async def index_paper(
     *,
     reindex_only: bool = False,
     parse_only: bool = False,
+    mineru_download_only: bool = False,
     progress: TaskProgress | None = None,
+) -> dict:
+    with log_context(paper_id=paper_id):
+        return await _index_paper_body(
+            paper_id,
+            force,
+            reindex_only=reindex_only,
+            parse_only=parse_only,
+            mineru_download_only=mineru_download_only,
+            progress=progress,
+        )
+
+
+async def _index_paper_body(
+    paper_id: str,
+    force: bool,
+    *,
+    reindex_only: bool,
+    parse_only: bool,
+    mineru_download_only: bool,
+    progress: TaskProgress | None,
 ) -> dict:
     t0 = time.monotonic()
     plog_info(
         "index",
-        "index_paper 开始 paper_id=%s force=%s reindex_only=%s parse_only=%s",
+        "index_paper 开始 paper_id=%s force=%s reindex_only=%s parse_only=%s mineru_download_only=%s",
         paper_id,
         force,
         reindex_only,
         parse_only,
+        mineru_download_only,
     )
     if reindex_only and force:
         return {"ok": False, "error": "reindex_only 与 force 不能同时使用（前者仅重建分块/嵌入，不跑 MinerU）"}
     if parse_only and reindex_only:
         return {"ok": False, "error": "parse_only 与 reindex_only 不能同时使用"}
+    if mineru_download_only and (force or reindex_only):
+        return {"ok": False, "error": "mineru_download_only 与 force / reindex_only 不能同时使用"}
     paper = get_paper(paper_id)
     if not paper or paper.get("deleted"):
         err = "文献不存在或已归档"
@@ -207,7 +242,10 @@ async def index_paper(
         loaded = None if force else load_parsed_markdown(out_dir)
         need_parse = force or loaded is None or pdf_changed
 
-    if pdf_changed and loaded and not force:
+    if mineru_download_only:
+        need_parse = True
+
+    if pdf_changed and loaded and not force and not mineru_download_only:
         plog_info(
             "index",
             "PDF 已变更（meta pdf_sha256=%s != 当前 %s），将重新解析",
@@ -215,7 +253,18 @@ async def index_paper(
             pdf_sha[:12] if pdf_sha else "?",
         )
 
-    if need_parse:
+    if need_parse and mineru_download_only:
+        from app.services.mineru_download_retry import paper_has_mineru_download_pending, retry_mineru_cloud_download
+
+        if not paper_has_mineru_download_pending(paper_id):
+            err = "无 MinerU 待下载记录（mineru_pending.json），请使用「重试解析」"
+            set_paper_status(paper_id, index_status="failed", status_message=err, parse_status="failed")
+            return {"ok": False, "error": err, "paper_id": paper_id}
+        if progress:
+            progress.update("parse", 0, 1, "重试 MinerU 结果下载…")
+        async with mineru_parse_semaphore():
+            md, meta = await asyncio.to_thread(retry_mineru_cloud_download, paper_id)
+    elif need_parse:
         if force:
             cleared = clear_parsed_output_dir(out_dir)
             plog_info("index", "强制重建：已清空解析缓存目录 %s（%s 项）", out_dir, cleared)
@@ -229,7 +278,10 @@ async def index_paper(
                 out_dir,
                 force_reparse=force,
                 pdf_sha256=(pdf_sha.strip() or None) if pdf_sha else None,
+                report_progress=_parse_progress_reporter(progress),
             )
+
+    if need_parse:
         if progress:
             progress.update("parse", 1, 1, "解析完成")
         md = clean_markdown(md)
@@ -238,9 +290,10 @@ async def index_paper(
         meta["markdown_cleaned"] = True
         (out_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         report = analyze_markdown(md, parser=str(meta.get("mode") or "mineru"), parser_mode=meta.get("parser_mode"))
-        md, meta, report = await maybe_retry_low_quality_parse(
-            paper_id, pdf_path, out_dir, md, meta, report, force=force
-        )
+        if not mineru_download_only:
+            md, meta, report = await maybe_retry_low_quality_parse(
+                paper_id, pdf_path, out_dir, md, meta, report, force=force
+            )
         prev = None if force else latest_parse_report(paper_id)
         if prev and (prev.get("parse_quality_score") or 0) > (report.get("parse_quality_score") or 0):
             plog_info(
@@ -403,12 +456,24 @@ async def index_paper(
             n_batches,
             batch,
         )
+        if progress:
+            progress.update(
+                "embed",
+                0,
+                n_texts,
+                f"BGE 嵌入开始 chunks={n_texts} 批次数={n_batches}",
+            )
     t_embed = time.monotonic()
     for i in range(0, n_texts, batch):
         slice_t = texts[i : i + batch]
         done = min(i + len(slice_t), n_texts)
         if progress:
-            progress.update("embed", done, n_texts)
+            progress.update(
+                "embed",
+                done,
+                n_texts,
+                f"BGE 嵌入 {done}/{n_texts}",
+            )
         try:
             async with index_embed_semaphore():
                 vecs = await embed_client.embed(slice_t)
@@ -434,18 +499,31 @@ async def index_paper(
     from app.services.openscholar_retrieval import encode_passages, openscholar_retriever_enabled
 
     if openscholar_retriever_enabled():
-        plog_info("index", "OpenScholar Retriever 嵌入开始 chunks=%s", len(texts))
+        n_scholar = len(texts)
+        plog_info("index", "OpenScholar Retriever 嵌入开始 chunks=%s", n_scholar)
+        if progress:
+            progress.update(
+                "scholar_embed",
+                0,
+                n_scholar,
+                f"OpenScholar Retriever 嵌入开始 chunks={n_scholar}",
+            )
         sb = settings.openscholar_encode_batch_size
         try:
 
             def _encode_scholar_batch(slice_t: list[str]) -> list[list[float]]:
                 return encode_passages(slice_t)
 
-            for i in range(0, len(texts), sb):
+            for i in range(0, n_scholar, sb):
                 slice_t = texts[i : i + sb]
-                done = min(i + len(slice_t), len(texts))
+                done = min(i + len(slice_t), n_scholar)
                 if progress:
-                    progress.update("scholar_embed", done, len(texts))
+                    progress.update(
+                        "scholar_embed",
+                        done,
+                        n_scholar,
+                        f"OpenScholar Retriever 嵌入 {done}/{n_scholar}",
+                    )
                 async with index_embed_semaphore():
                     vecs = await asyncio.to_thread(_encode_scholar_batch, slice_t)
                 for j, v in enumerate(vecs):
@@ -454,11 +532,21 @@ async def index_paper(
             plog_info("index", "OpenScholar Retriever 嵌入失败（将仅依赖 FTS/运行时编码）: %s", e)
             scholar_embeddings = [None] * len(texts)
         else:
+            scholar_ok = sum(1 for e in scholar_embeddings if e is not None)
             plog_info(
                 "index",
-                "OpenScholar Retriever 嵌入完成 ok=%s",
-                sum(1 for e in scholar_embeddings if e is not None),
+                "OpenScholar Retriever 嵌入完成 paper_id=%s ok=%s/%s",
+                paper_id,
+                scholar_ok,
+                n_scholar,
             )
+            if progress:
+                progress.update(
+                    "scholar_embed",
+                    n_scholar,
+                    n_scholar,
+                    f"OpenScholar Retriever 嵌入完成 ok={scholar_ok}/{n_scholar}",
+                )
 
     if progress:
         progress.update("save", 0, 1, "写入数据库…")

@@ -42,6 +42,14 @@ def cancel_orphan_tasks():
     return cancel_orphan_pending_tasks()
 
 
+@router.post("/purge-terminal")
+def purge_terminal_tasks():
+    """删除 status 为 failed / cancelled 的历史任务记录。"""
+    from app.services.task_queue import purge_terminal_tasks as purge
+
+    return purge()
+
+
 @router.get("/active/stream")
 async def stream_active_tasks():
     """SSE：推送活动任务进度与状态变更（替代高频轮询 /tasks/active）。"""

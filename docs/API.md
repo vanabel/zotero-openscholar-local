@@ -15,8 +15,9 @@
 |------|------|------|
 | POST | `/scan` | 扫描 Zotero storage（增量） |
 | POST | `/papers/sync-zotero-metadata` | 从 `zotero.sqlite` 同步题录 |
-| GET | `/papers` | 列表；`q=` 搜索；`parse_quality_lte` / `gte` / `missing`；`sort=`；含 `has_paper_summary` |
+| GET | `/papers` | 列表；`q=` 搜索；`parse_quality_lte` / `gte` / `missing`；`sort=`；`work_queue=`（`index_missing`、`parse_missing`、`mineru_pending`、`summarize_missing`、`unscored_rescore`、`lance_scholar`；其中 `lance_scholar` 为 SQLite 已有 scholar 向量但 Lance 尚无该文献）；含 `has_paper_summary` |
 | GET | `/papers/quality-summary` | 全库解析质量分布 |
+| GET | `/papers/batch-work-summary` | 批量面板数量；`lance_scholar_papers` 为待同步 Lance 篇数，`lance_scholar_sqlite_with_vectors` 为 SQLite 含向量候选总数，`lance_scholar_in_lance` 为 Lance 表中已有文献数 |
 | GET | `/papers/{id}` | 单篇元数据 |
 | GET | `/papers/{id}/parse-report` | 单篇解析报告（无则 404） |
 | GET | `/papers/{id}/parse-meta` | `parsed/{id}/meta.json`（MinerU 模式等） |
@@ -39,7 +40,7 @@
 | POST | `/papers/summarize-missing` | 为已 indexed 且无 `paper_summary` 文献入队摘要（需 LLM） |
 | POST | `/papers/rescore-unscored` | 未评分且有 `document.md`：仅补 `parse_quality_score`（不跑 MinerU） |
 | POST | `/papers/{id}/rescore-parse-quality` | 单篇补解析质量分 |
-| POST | `/papers/sync-lance-indexed` | 将已有 `scholar_embedding_json` 写入 LanceDB（不重新分块/嵌入）；body 可选 `paper_ids` / `limit` |
+| POST | `/papers/sync-lance-indexed` | 将 SQLite 的 `scholar_embedding_json` 写入 LanceDB（不重新分块/嵌入）；未指定 `paper_ids` 时仅同步「待同步」篇；body 可选 `paper_ids` / `limit` |
 | POST | `/papers/{id}/sync-lance` | 单篇同步 Lance |
 
 ## 任务

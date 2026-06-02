@@ -2,12 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api";
+import { ActiveTasksMonitor } from "@/components/ActiveTasksMonitor";
 import { labelTaskKind } from "@/lib/taskKind";
+import { formatQueueEstimateBrief, formatQueueEstimateSummary } from "@/lib/taskMonitorMetrics";
+import type { ActiveTaskRow } from "@/lib/useActiveTasks";
+import { useQueueEstimate } from "@/lib/useQueueEstimate";
+import type { QueueThroughputFromApi } from "@/lib/taskMonitorMetrics";
 
 export type TaskStatsResponse = {
   total: number;
   pending: number;
   worker_concurrency: number;
+  index_embed_concurrency?: number;
+  mineru_parse_concurrency?: number;
   by_status: { status: string; count: number }[];
   by_type: { task_type: string; count: number }[];
   by_type_status: { task_type: string; status: string; count: number }[];
@@ -15,6 +22,7 @@ export type TaskStatsResponse = {
   by_kind_status?: { kind: string; status: string; count: number }[];
   pending_range: { oldest: string | null; newest: string | null } | null;
   orphan_pending: number;
+  queue_throughput?: QueueThroughputFromApi | null;
   failed_samples: {
     id: string;
     task_type: string;
@@ -57,6 +65,8 @@ const KIND_ORDER = [
   "summarize",
 ];
 
+const STATUS_ORDER = ["running", "queued", "failed", "completed", "cancelled"] as const;
+
 function labelStatus(s: string) {
   return STATUS_LABEL[s] ?? s;
 }
@@ -82,15 +92,19 @@ type Props = {
   autoRefresh?: boolean;
   intervalMs?: number;
   onQueueChanged?: () => void;
+  /** 由文献库页 SSE 推送的活动任务（按 paper 监控） */
+  activeTasks?: ActiveTaskRow[];
 };
 
 export function TaskStatsPanel({
   autoRefresh = false,
   intervalMs = 12_000,
   onQueueChanged,
+  activeTasks = [],
 }: Props) {
   const [open, setOpen] = useState(false);
   const [matrixOpen, setMatrixOpen] = useState(false);
+  const [failedOpen, setFailedOpen] = useState(false);
   const [stats, setStats] = useState<TaskStatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
@@ -124,24 +138,9 @@ export function TaskStatsPanel({
   const queuedCount = countByStatus(stats?.by_status ?? [], "queued");
   const runningCount = countByStatus(stats?.by_status ?? [], "running");
   const failedCount = countByStatus(stats?.by_status ?? [], "failed");
+  const cancelledCount = countByStatus(stats?.by_status ?? [], "cancelled");
   const pending = stats?.pending ?? 0;
   const orphanPending = stats?.orphan_pending ?? 0;
-
-  const kindRows = useMemo(() => {
-    const raw =
-      stats?.by_kind && stats.by_kind.length > 0
-        ? stats.by_kind
-        : (stats?.by_type ?? []).map((r) => ({ kind: r.task_type, count: r.count }));
-    return [...raw].sort((a, b) => {
-      const ai = KIND_ORDER.indexOf(a.kind);
-      const bi = KIND_ORDER.indexOf(b.kind);
-      if (ai === -1 && bi === -1) return b.count - a.count;
-      if (ai === -1) return 1;
-      if (bi === -1) return -1;
-      return ai - bi || b.count - a.count;
-    });
-  }, [stats]);
-
   const kindStatusRows = useMemo(() => {
     const raw =
       stats?.by_kind_status && stats.by_kind_status.length > 0
@@ -166,6 +165,70 @@ export function TaskStatsPanel({
     });
   }, [stats]);
 
+  const queueEstimates = useQueueEstimate(
+    activeTasks,
+    queuedCount,
+    stats?.worker_concurrency,
+    kindStatusRows,
+    stats?.queue_throughput,
+  );
+  const queueSummary = formatQueueEstimateSummary(queueEstimates.overall);
+
+  const kindRows = useMemo(() => {
+    const raw =
+      stats?.by_kind && stats.by_kind.length > 0
+        ? stats.by_kind
+        : (stats?.by_type ?? []).map((r) => ({ kind: r.task_type, count: r.count }));
+    return [...raw].sort((a, b) => {
+      const ai = KIND_ORDER.indexOf(a.kind);
+      const bi = KIND_ORDER.indexOf(b.kind);
+      if (ai === -1 && bi === -1) return b.count - a.count;
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi || b.count - a.count;
+    });
+  }, [stats]);
+
+  const statusTableRows = useMemo(() => {
+    const byStatus = new Map((stats?.by_status ?? []).map((r) => [r.status, r.count]));
+    return STATUS_ORDER.filter((status) => (byStatus.get(status) ?? 0) > 0).map((status) => ({
+      key: status,
+      col1: labelStatus(status),
+      col1Tone: STATUS_TONE[status],
+      count: byStatus.get(status) ?? 0,
+    }));
+  }, [stats]);
+
+  const kindTableRows = useMemo(() => {
+    const totalByKind = new Map<string, number>();
+    const cancelledByKind = new Map<string, number>();
+    for (const r of kindStatusRows) {
+      totalByKind.set(r.kind, (totalByKind.get(r.kind) ?? 0) + r.count);
+      if (r.status === "cancelled") {
+        cancelledByKind.set(r.kind, r.count);
+      }
+    }
+    for (const r of kindRows) {
+      if (!totalByKind.has(r.kind)) totalByKind.set(r.kind, r.count);
+    }
+    return [...totalByKind.entries()]
+      .sort((a, b) => {
+        const ai = KIND_ORDER.indexOf(a[0]);
+        const bi = KIND_ORDER.indexOf(b[0]);
+        if (ai === -1 && bi === -1) return b[1] - a[1];
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi || b[1] - a[1];
+      })
+      .map(([kind, total]) => ({
+        key: kind,
+        col1: labelTaskKind(kind),
+        col1Tone: kindTone(kind),
+        count: total,
+        cancelled: cancelledByKind.get(kind) ?? 0,
+      }));
+  }, [kindStatusRows, kindRows]);
+
   const activeKindRows = kindStatusRows.filter((r) =>
     ["queued", "running"].includes(r.status),
   );
@@ -178,6 +241,7 @@ export function TaskStatsPanel({
     try {
       const res = await apiPost<Record<string, number>>(path, {});
       const parts: string[] = [label];
+      if (typeof res.deleted === "number") parts.push(`删除 ${res.deleted} 条`);
       if (typeof res.cancelled === "number") parts.push(`取消排队 ${res.cancelled} 条`);
       if (typeof res.failed === "number" && res.failed > 0) parts.push(`标记失败 ${res.failed} 条`);
       if (typeof res.papers_reverted === "number" && res.papers_reverted > 0) {
@@ -204,6 +268,17 @@ export function TaskStatsPanel({
   }
 
   return (
+    <div className="space-y-3">
+      {(activeTasks.some((t) => t.status === "running") || queuedCount > 0) && (
+        <ActiveTasksMonitor
+          items={activeTasks}
+          workerConcurrency={stats?.worker_concurrency}
+          indexEmbedConcurrency={stats?.index_embed_concurrency}
+          queuedCount={queuedCount}
+          queueEstimate={queueEstimates.overall}
+          byKindEstimates={queueEstimates.byKind}
+        />
+      )}
     <section className="rounded-xl border border-mist-200 bg-white shadow-sm overflow-hidden">
       <button
         type="button"
@@ -220,17 +295,23 @@ export function TaskStatsPanel({
                 <StatusChip status="queued" label={`排队 ${queuedCount}`} />
               )}
               {runningCount > 0 && (
-                <StatusChip status="running" label={`执行 ${runningCount}`} />
+                <StatusChip status="running" label={`执行中 ${runningCount}`} />
               )}
               {failedCount > 0 && (
                 <StatusChip status="failed" label={`失败 ${failedCount}`} />
               )}
-              {pending === 0 && failedCount === 0 && (
+              {cancelledCount > 0 && (
+                <StatusChip status="cancelled" label={`已取消 ${cancelledCount}`} />
+              )}
+              {pending === 0 && failedCount === 0 && cancelledCount === 0 && (
                 <span className="text-xs text-emerald-800">· 空闲</span>
               )}
               {pending > 0 && (
                 <span className="text-xs text-ink-500">
                   · Worker×{stats.worker_concurrency}
+                  {(stats.index_embed_concurrency ?? 0) > 0 &&
+                    ` · 嵌入×${stats.index_embed_concurrency}`}
+                  {queueSummary ? ` · ${queueSummary}` : ""}
                 </span>
               )}
             </span>
@@ -244,10 +325,16 @@ export function TaskStatsPanel({
           {stats && (
             <div className="grid grid-cols-3 gap-2">
               <MetricCard
-                label="排队"
+                label="排队（queued）"
                 value={queuedCount}
                 tone="amber"
-                hint={queuedCount > 0 ? "可「取消全部排队」" : undefined}
+                hint={
+                  queuedCount > 0
+                    ? "尚未被 Worker 取走，可「取消全部排队」"
+                    : runningCount > 0
+                      ? "为 0 正常：任务已被 Worker 接走，见「执行中」"
+                      : "无等待中的任务"
+                }
               />
               <MetricCard
                 label="执行中"
@@ -255,7 +342,7 @@ export function TaskStatsPanel({
                 tone="sky"
                 hint={
                   runningCount > 0
-                    ? `并发上限 ${stats.worker_concurrency}`
+                    ? `任务并发 ${stats.worker_concurrency}；嵌入 API 全局 ${stats.index_embed_concurrency ?? 2} 路`
                     : undefined
                 }
               />
@@ -264,9 +351,10 @@ export function TaskStatsPanel({
                 value={pending}
                 tone="ink"
                 hint={
-                  stats.pending_range
+                  queueSummary ??
+                  (stats.pending_range
                     ? `${formatWhen(stats.pending_range.oldest).slice(5)} 起`
-                    : undefined
+                    : undefined)
                 }
               />
             </div>
@@ -295,6 +383,22 @@ export function TaskStatsPanel({
               title="仅取消 status=queued，不中断 running"
             >
               取消全部排队{queuedCount > 0 ? `（${queuedCount}）` : ""}
+            </button>
+            <button
+              type="button"
+              disabled={actionBusy || (failedCount === 0 && cancelledCount === 0)}
+              onClick={() =>
+                void runAction(
+                  "已清理终态任务",
+                  `确定删除全部失败与已取消的任务记录？失败 ${failedCount} 条，已取消 ${cancelledCount} 条（不可恢复）。`,
+                  "/tasks/purge-terminal",
+                )
+              }
+              className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs text-red-900 hover:bg-red-100 disabled:opacity-50"
+              title="删除 status=failed 与 cancelled 的历史任务，不影响排队或执行中的任务"
+            >
+              清理失败/已取消
+              {failedCount + cancelledCount > 0 ? `（${failedCount + cancelledCount}）` : ""}
             </button>
             <button
               type="button"
@@ -328,7 +432,9 @@ export function TaskStatsPanel({
                     进行中（按类型）
                   </h3>
                   <div className="flex flex-wrap gap-2">
-                    {activeKindRows.map((r) => (
+                    {activeKindRows.map((r) => {
+                      const kindEta = formatQueueEstimateBrief(queueEstimates.byKind[r.kind]);
+                      return (
                       <span
                         key={`${r.kind}-${r.status}`}
                         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${kindTone(r.kind)}`}
@@ -340,8 +446,14 @@ export function TaskStatsPanel({
                         </span>
                         {labelTaskKind(r.kind)}
                         <strong className="tabular-nums">{r.count}</strong>
+                        {kindEta ? (
+                          <span className="text-[10px] font-normal opacity-90" title="按该类型均速估算">
+                            {kindEta}
+                          </span>
+                        ) : null}
                       </span>
-                    ))}
+                    );
+                    })}
                   </div>
                 </div>
               )}
@@ -349,22 +461,13 @@ export function TaskStatsPanel({
               <div className="grid gap-4 sm:grid-cols-2">
                 <StatsTable
                   title="按状态"
-                  rows={(stats.by_status ?? []).map((r) => ({
-                    key: r.status,
-                    col1: labelStatus(r.status),
-                    col1Tone: STATUS_TONE[r.status],
-                    count: r.count,
-                  }))}
+                  rows={statusTableRows}
                 />
                 <StatsTable
                   title="按任务类型"
                   emptyHint="暂无任务记录"
-                  rows={kindRows.map((r) => ({
-                    key: r.kind,
-                    col1: labelTaskKind(r.kind),
-                    col1Tone: kindTone(r.kind),
-                    count: r.count,
-                  }))}
+                  showCancelledColumn
+                  rows={kindTableRows}
                 />
               </div>
 
@@ -419,10 +522,16 @@ export function TaskStatsPanel({
 
               {stats.failed_samples.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-500 mb-2">
-                    最近失败（{stats.failed_samples.length}）
-                  </h3>
-                  <ul className="space-y-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setFailedOpen((v) => !v)}
+                    className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wide text-ink-500 hover:text-ink-800"
+                  >
+                    <span>最近失败（{stats.failed_samples.length}）</span>
+                    <span>{failedOpen ? "收起 ▲" : "展开 ▼"}</span>
+                  </button>
+                  {failedOpen && (
+                    <ul className="mt-2 space-y-2 text-xs">
                     {stats.failed_samples.map((f) => (
                       <li
                         key={f.id}
@@ -452,7 +561,8 @@ export function TaskStatsPanel({
                         </p>
                       </li>
                     ))}
-                  </ul>
+                    </ul>
+                  )}
                 </div>
               )}
             </>
@@ -460,6 +570,7 @@ export function TaskStatsPanel({
         </div>
       )}
     </section>
+    </div>
   );
 }
 
@@ -502,7 +613,11 @@ function MetricCard({
       <div className={`mt-0.5 text-xl font-semibold tabular-nums ${valueTones[tone]}`}>
         {value}
       </div>
-      {hint && <div className="mt-0.5 text-[10px] text-ink-600 truncate">{hint}</div>}
+      {hint && (
+        <div className="mt-0.5 text-[10px] leading-snug text-ink-600 line-clamp-3" title={hint}>
+          {hint}
+        </div>
+      )}
     </div>
   );
 }
@@ -511,10 +626,18 @@ function StatsTable({
   title,
   rows,
   emptyHint,
+  showCancelledColumn = false,
 }: {
   title: string;
-  rows: { key: string; col1: string; col1Tone?: string; count: number }[];
+  rows: {
+    key: string;
+    col1: string;
+    col1Tone?: string;
+    count: number;
+    cancelled?: number;
+  }[];
   emptyHint?: string;
+  showCancelledColumn?: boolean;
 }) {
   return (
     <div>
@@ -527,6 +650,17 @@ function StatsTable({
         </p>
       ) : (
         <table className="w-full text-xs rounded-lg border border-mist-200 overflow-hidden">
+          <thead className="bg-mist-50 text-ink-600">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium">
+                {showCancelledColumn ? "类型" : "状态"}
+              </th>
+              <th className="px-3 py-2 text-right font-medium">合计</th>
+              {showCancelledColumn && (
+                <th className="px-3 py-2 text-right font-medium">已取消</th>
+              )}
+            </tr>
+          </thead>
           <tbody className="divide-y divide-mist-100">
             {rows.map((r) => (
               <tr key={r.key}>
@@ -538,6 +672,17 @@ function StatsTable({
                   </span>
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums font-medium">{r.count}</td>
+                {showCancelledColumn && (
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {(r.cancelled ?? 0) > 0 ? (
+                      <span className="inline-block rounded border border-mist-200 bg-mist-100 px-1.5 py-0.5 text-ink-700">
+                        {r.cancelled}
+                      </span>
+                    ) : (
+                      <span className="text-ink-400">0</span>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

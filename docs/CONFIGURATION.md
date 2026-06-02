@@ -60,7 +60,11 @@ pnpm run download:mineru-models   # 默认从 ~/mineru.json 符号链接；`:cop
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `TASK_WORKER_MODE` | `embedded` | `embedded`：API 进程内消费队列；`external`：仅入队，另开 Worker |
-| `TASK_WORKER_CONCURRENCY` | `1` | 同时执行的任务数（1–16）；摘要与索引共用同一队列 |
+| `TASK_WORKER_CONCURRENCY` | `1` | 同时**从队列取走**、状态为 `running` 的任务数（1–16）；摘要与索引共用同一队列 |
+| `INDEX_EMBED_CONCURRENCY` | `2` | **全局** BGE / OpenScholar 嵌入批次的并行上限（1–8），与 Worker 数独立 |
+| `MINERU_PARSE_CONCURRENCY` | `1` | **全局** MinerU 解析并行上限（1–128） |
+
+说明：界面「执行中 N」= 数据库里 `running` 的任务数，理论上 N ≤ `TASK_WORKER_CONCURRENCY`。若 Worker=4 但嵌入阶段只有 2 路在跑 API，多半是 `INDEX_EMBED_CONCURRENCY=2` 限制了嵌入；其余 `running` 任务可能在分块、写库或等待嵌入槽位。要让 4 篇同时嵌入，需把 `INDEX_EMBED_CONCURRENCY` 提到 4（注意 Ollama/GPU 负载）。修改后需**重启 API**。
 
 `external` 时：
 
@@ -90,6 +94,17 @@ pnpm run dev:external   # 或 API + pnpm run dev:worker
 | `2` | 含检索词、上下文预览 |
 
 `LOG_STAGES`：`retrieve,embed,rag,llm,review,scan,index,parse,translate,cache,db,task,summary`（留空 = 全部）。
+
+`LOG_CONTEXT`（默认 `1`）：在每条日志前附加当前 `task=` / `paper=` 前缀（取 id 前 8 位），便于 `TASK_WORKER_CONCURRENCY` / `INDEX_EMBED_CONCURRENCY` 并发时按文献过滤，例如：
+
+```bash
+# 终端里只看某篇文献的流水线日志（paper_id 前 8 位）
+pnpm run dev 2>&1 | grep 'paper=51e99e0a'
+```
+
+设为 `0` 可恢复旧版纯时间戳格式。
+
+文献库页在批量索引等任务运行时会显示 **「正在处理 · 按文献」** 面板（SSE `/tasks/active/stream`）：仅列出 `running` 的文献（排队中的在标题栏显示数量，不展开）；每行按流水线列出各阶段（解析 / 分块 / 嵌入等）：已完成阶段显示耗时与均速，当前阶段实时更新，未开始为「待处理」，未启用步骤（如未开 OpenScholar 嵌入）为「跳过」。阶段历史由后端写入 `progress_json.phase_history`。MinerU 云端轮询的页码进度（如 `114/200 页`）会写入 `progress_json` 并推送 SSE，与终端日志同步。列表行上的解析/索引徽章仍包含排队任务。终端亦可轮询 `GET /tasks/active`。
 
 ## 主对话模型（OpenScholar-8B）
 
@@ -128,7 +143,22 @@ OPENSCHOLAR_CHAT_MAX_NEW_TOKENS=4096
 
 `~/models/openscholar-retriever` / `openscholar-reranker` 仅用于检索，与对话权重无关。`openscholar-q4` 为 Ollama 侧缓存占位；GGUF 在 Ollama 内由 `OLLAMA_CHAT_MODEL` 引用。若 `openscholar-ms-8b` 只有 tokenizer、权重在 `._____temp` 且约 450MB，说明 **ModelScope 下载未完成**，需补全后再走本地路径。
 
-首次运行会从 Hugging Face 下载约 16GB；Apple Silicon 建议 `mps`，约需 16GB+ 统一内存。可与 `EMBED_PROVIDER=openai` 混用。
+首次运行若未配置本地路径，会从 Hugging Face 下载约 16GB。国内建议先用魔搭下载到 `~/models/openscholar-ms-8b` 再指定 `OPENSCHOLAR_CHAT_MODEL`：
+
+```bash
+cd apps/api && .venv/bin/pip install modelscope
+npm run download:openscholar-chat
+# 或：.venv/bin/python scripts/download_openscholar_chat_model.py --force
+```
+
+```env
+OPENSCHOLAR_CHAT_MODEL=/Users/<you>/models/openscholar-ms-8b
+CHAT_PROVIDER=transformers
+```
+
+备选：`HF_ENDPOINT=https://hf-mirror.com`（仍走 HF 模型 id，见 `apps/api/.env.example`）。Apple Silicon 建议 `mps`，约需 16GB+ 统一内存。可与 `EMBED_PROVIDER=openai` 混用。
+
+**GPU 利用率（MPS）**：日志中 `device=mps:0` 表示权重在 Apple GPU；自回归生成一次只出一个 token，活动监视器里 GPU 占用率常明显低于 100%，属正常现象。**无法通过 `TASK_WORKER_CONCURRENCY>1` 并行加速**（进程内共享一把推理锁）；并发>1 时只会连续刷 `chat 开始`，GPU 仍一次只算一篇。请保持 `TASK_WORKER_CONCURRENCY=1`；批量摘要优先 `OPENSCHOLAR_SUMMARY_MAX_NEW_TOKENS=768`、检索模型 `OPENSCHOLAR_DEVICE=cpu`，或改用 Ollama GGUF。日志应成对出现：`推理开始` → `推理完成 … 均速=XX tok/s` → `chat 完成`。探测：`cd apps/api && .venv/bin/python scripts/probe_openscholar_mps.py`。
 
 Retriever/Reranker 与对话模型独立，均在 `apps/api/.venv` 用 PyTorch 加载。
 

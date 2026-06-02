@@ -109,6 +109,94 @@ def backfill_lance_batch(paper_ids: list[str]) -> dict:
     }
 
 
+def count_distinct_papers_with_scholar_embeddings() -> int:
+    """至少有一条 chunk 含非空 scholar 向量的文献数（SQLite 侧「具备写入 Lance 条件」的候选池）。"""
+    from app.db import get_db
+
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(DISTINCT paper_id) AS c FROM chunks
+            WHERE scholar_embedding_json IS NOT NULL AND TRIM(scholar_embedding_json) != ''
+            """
+        ).fetchone()
+    return int(row["c"] if row else 0)
+
+
+def distinct_paper_ids_in_lance_scholar() -> set[str]:
+    """Lance `scholar_chunks` 表中已出现的文献 id（按 paper_id 去重）。"""
+    if not lancedb_enabled():
+        return set()
+    db = _connect()
+    if _TABLE not in db.table_names():
+        return set()
+    tbl = db.open_table(_TABLE)
+    if tbl.count_rows() == 0:
+        return set()
+    import pyarrow.compute as pc
+
+    arrow = tbl.to_arrow()
+    if arrow.num_rows == 0 or "paper_id" not in arrow.column_names:
+        return set()
+    uni = pc.unique(arrow["paper_id"])
+    return {str(x) for x in uni.to_pylist() if x is not None and str(x) != ""}
+
+
+def count_distinct_papers_in_lance_scholar() -> int:
+    """Lance 中至少有一条 scholar 向量行的文献数。"""
+    return len(distinct_paper_ids_in_lance_scholar())
+
+
+def count_lance_scholar_sync_pending() -> int:
+    """
+    SQLite 已有 scholar 向量、但 Lance 中尚无该 paper_id 的文献数。
+    LanceDB 未启用时，视为全部尚未写入 Lance（与批量同步的「可处理」范围一致）。
+    """
+    if not lancedb_enabled():
+        return count_distinct_papers_with_scholar_embeddings()
+    lance_ids = distinct_paper_ids_in_lance_scholar()
+    pending = 0
+    from app.db import get_db
+
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT paper_id FROM chunks
+            WHERE scholar_embedding_json IS NOT NULL AND TRIM(scholar_embedding_json) != ''
+            """
+        )
+        for r in rows:
+            if str(r["paper_id"]) not in lance_ids:
+                pending += 1
+    return pending
+
+
+def list_lance_sync_pending_paper_ids(*, limit: int | None = None) -> list[str]:
+    """
+    与 count_lance_scholar_sync_pending 一致的文献 id 列表（用于 work_queue=lance_scholar）。
+    LanceDB 未启用时返回全部「SQLite 含向量」的 id（与旧版 lance_scholar 列表行为一致）。
+    """
+    if not lancedb_enabled():
+        return list_paper_ids_with_scholar_embeddings(limit=limit)
+    lance_ids = distinct_paper_ids_in_lance_scholar()
+    out: list[str] = []
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT paper_id FROM chunks
+            WHERE scholar_embedding_json IS NOT NULL AND TRIM(scholar_embedding_json) != ''
+            ORDER BY paper_id
+            """
+        ).fetchall()
+    for r in rows:
+        pid = str(r["paper_id"])
+        if pid not in lance_ids:
+            out.append(pid)
+            if limit is not None and len(out) >= limit:
+                break
+    return out
+
+
 def list_paper_ids_with_scholar_embeddings(*, limit: int | None = None) -> list[str]:
     from app.db import get_db
 

@@ -9,7 +9,8 @@ from app.services.pdf_parse import load_parsed_markdown
 from app.services.summaries import upsert_paper_summary
 from app.services.zotero_scanner import get_paper
 
-_SUMMARY_INPUT_MAX = 14_000
+# 过长 prefill 会在 MPS 上极慢且易空输出；约 8k 字符 ≈ 2k token 量级
+_SUMMARY_INPUT_MAX = 8_000
 
 
 async def generate_paper_summary(paper_id: str, *, lang: str = "zh") -> dict:
@@ -40,12 +41,21 @@ async def generate_paper_summary(paper_id: str, *, lang: str = "zh") -> dict:
         text = await client.chat(
             [{"role": "system", "content": sys}, {"role": "user", "content": user}],
             temperature=0.2,
+            max_new_tokens=int(settings.openscholar_summary_max_new_tokens),
+            max_input_tokens=2048,
         )
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        err = str(e).strip() or f"{type(e).__name__}"
+        return {"ok": False, "error": err}
 
     content = (text or "").strip()
     if len(content) < 40:
+        plog_info(
+            "summary",
+            "摘要过短 paper_id=%s 输出字符=%s（检查 MPS 内存或改用 Ollama）",
+            paper_id,
+            len(content),
+        )
         return {"ok": False, "error": "摘要过短或模型无输出"}
 
     sid = upsert_paper_summary(paper_id, "paper_summary", content, model=chat_model_id())

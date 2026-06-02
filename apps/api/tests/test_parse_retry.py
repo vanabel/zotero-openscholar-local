@@ -11,6 +11,30 @@ def test_retry_model_for_pypdf_uses_primary_vlm():
     assert parse_retry._retry_model_for_mode("pypdf") == "vlm"
 
 
+def test_maybe_retry_skips_empty_markdown(monkeypatch):
+    import asyncio
+    from pathlib import Path
+
+    monkeypatch.setattr(parse_retry.settings, "parse_quality_retry_enabled", True)
+    monkeypatch.setattr(parse_retry.settings, "parse_quality_retry_threshold", 0.65)
+    monkeypatch.setattr(parse_retry.settings, "mineru_api_token", "token")
+
+    async def _run():
+        return await parse_retry.maybe_retry_low_quality_parse(
+            "p1",
+            Path("/tmp/x.pdf"),
+            Path("/tmp/out"),
+            "",
+            {"mode": "mineru_cloud"},
+            {"parse_quality_score": 0.1},
+            force=False,
+        )
+
+    md, meta, report = asyncio.run(_run())
+    assert md == ""
+    assert not meta.get("low_quality_retried")
+
+
 def test_maybe_retry_skips_when_score_ok(monkeypatch):
     import asyncio
     from pathlib import Path

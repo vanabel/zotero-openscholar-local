@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { GlobalTaskQueueBanner } from "@/components/GlobalTaskQueueBanner";
+import { ActiveTasksProvider } from "@/components/ActiveTasksProvider";
 import { Nav } from "@/components/Nav";
 
 export const metadata: Metadata = {
@@ -12,8 +14,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="zh-CN">
       <body>
-        <Nav />
-        <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+        <ActiveTasksProvider>
+          <Nav />
+          <GlobalTaskQueueBanner />
+          <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+        </ActiveTasksProvider>
       </body>
     </html>
   );

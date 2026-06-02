@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TaskStatsPanel } from "@/components/TaskStatsPanel";
-import { apiGet, apiPost, API_BASE, subscribeActiveTasks, type TaskStreamEvent } from "@/lib/api";
+import {
+  BatchWorkSummaryBar,
+  type BatchWorkSummary,
+  type WorkQueueFilter,
+} from "@/components/BatchWorkSummaryBar";
+import { apiGet, apiPost, API_BASE } from "@/lib/api";
 import { isTaskActive, resolveTaskKind } from "@/lib/taskKind";
+import { useActiveTaskListeners, useSharedActiveTasks } from "@/components/ActiveTasksProvider";
 
 const LOW_QUALITY_THRESHOLD = 0.65;
 
@@ -91,6 +97,7 @@ type PapersResponse = {
   items: Paper[];
   total: number;
   q: string | null;
+  filters?: { work_queue?: string | null };
 };
 
 const WARNING_LABELS: Record<string, string> = {
@@ -119,7 +126,18 @@ function qualityTone(score: number | null | undefined): {
   return { label: formatQualityScore(score), className: "bg-red-50 text-red-800" };
 }
 
-function SummaryBadge({ has }: { has: boolean | undefined }) {
+function SummaryBadge({ has, hint }: { has: boolean | undefined; hint?: string }) {
+  if (hint) {
+    return (
+      <span
+        className="inline-flex flex-wrap items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-900"
+        title={hint}
+      >
+        <span>摘要</span>
+        <span className="text-[11px] font-normal opacity-90">({hint})</span>
+      </span>
+    );
+  }
   if (!has) return null;
   return (
     <span
@@ -213,17 +231,6 @@ function PaperMetaLines({ p }: { p: Paper }) {
   );
 }
 
-type IndexTaskRow = {
-  id: string;
-  paper_id?: string | null;
-  task_type?: string;
-  kind?: string;
-  payload?: { parse_only?: boolean; reindex_only?: boolean; force?: boolean } | null;
-  status: string;
-  progress?: { phase?: string; done?: number; total?: number; message?: string } | null;
-  error?: string | null;
-};
-
 function StatusBadge({ label, value, hint }: { label: string; value: string; hint?: string }) {
   const ok = value === "parsed" || value === "indexed";
   const indexing = value === "indexing";
@@ -256,6 +263,8 @@ export default function LibraryPage() {
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("updated");
   const [qualitySummary, setQualitySummary] = useState<QualitySummary | null>(null);
+  const [batchWorkSummary, setBatchWorkSummary] = useState<BatchWorkSummary | null>(null);
+  const [workQueueFilter, setWorkQueueFilter] = useState<WorkQueueFilter | null>(null);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -268,26 +277,38 @@ export default function LibraryPage() {
   const [previewSummary, setPreviewSummary] = useState<PaperSummaryPreview | null>(null);
   const [previewSummaryMissing, setPreviewSummaryMissing] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [paperTasks, setPaperTasks] = useState<Map<string, IndexTaskRow>>(new Map());
-  const [taskPolling, setTaskPolling] = useState(false);
+  const refreshSeq = useRef(0);
 
   useEffect(() => {
     const t = window.setTimeout(() => setSearchQ(searchInput.trim()), 300);
     return () => window.clearTimeout(t);
   }, [searchInput]);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refreshBatchSummary = useCallback(async () => {
     try {
-      const qs = new URLSearchParams({ limit: "5000", sort: sortMode });
+      const bw = await apiGet<BatchWorkSummary>("/papers/batch-work-summary");
+      setBatchWorkSummary(bw);
+    } catch {
+      setBatchWorkSummary(null);
+    }
+  }, []);
+
+  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
+    const seq = ++refreshSeq.current;
+    if (!silent) setLoading(true);
+    try {
+      const qs = new URLSearchParams({ limit: "5000", sort: sortMode, reconcile: "false" });
       if (searchQ) qs.set("q", searchQ);
       if (qualityFilter === "low") qs.set("parse_quality_lte", String(LOW_QUALITY_THRESHOLD));
       else if (qualityFilter === "unscored") qs.set("parse_quality_missing", "true");
       else if (qualityFilter === "high") qs.set("parse_quality_gte", "0.85");
+      if (workQueueFilter) qs.set("work_queue", workQueueFilter);
       const [data, summary] = await Promise.all([
         apiGet<PapersResponse>(`/papers?${qs.toString()}`),
         apiGet<QualitySummary>("/papers/quality-summary"),
       ]);
+      if (seq !== refreshSeq.current) return;
       setItems(data.items);
       setTotal(data.total);
       setQualitySummary(summary);
@@ -301,35 +322,21 @@ export default function LibraryPage() {
       });
       setMsg(null);
     } catch (e) {
+      if (seq !== refreshSeq.current) return;
       setMsg(e instanceof Error ? e.message : "加载失败");
+      if (!silent) setBatchWorkSummary(null);
     } finally {
-      setLoading(false);
+      if (seq === refreshSeq.current && !silent) setLoading(false);
     }
-  }, [searchQ, qualityFilter, sortMode]);
+    if (seq === refreshSeq.current) void refreshBatchSummary();
+  }, [searchQ, qualityFilter, sortMode, workQueueFilter, refreshBatchSummary]);
+
+  const refreshAfterTasks = useCallback(() => {
+    void refresh({ silent: true });
+  }, [refresh]);
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
-
-  const syncActiveTasks = useCallback(async () => {
-    try {
-      const data = await apiGet<{ items: IndexTaskRow[] }>("/tasks/active");
-      const m = new Map<string, IndexTaskRow>();
-      let anyActive = false;
-      for (const t of data.items) {
-        const pid = t.paper_id;
-        if (pid) m.set(pid, t);
-        if (t.status === "queued" || t.status === "running") anyActive = true;
-      }
-      setPaperTasks(m);
-      if (!anyActive) {
-        setTaskPolling(false);
-        await refresh();
-      }
-      return anyActive;
-    } catch {
-      return false;
-    }
   }, [refresh]);
 
   const loadPreview = useCallback(async (id: string) => {
@@ -366,69 +373,23 @@ export default function LibraryPage() {
     }
   }, []);
 
-  useEffect(() => {
-    void syncActiveTasks().then((active) => {
-      if (active) setTaskPolling(true);
-    });
-  }, [syncActiveTasks]);
+  const onTaskFinished = useCallback(
+    (ev: { status: string; task_type?: string; paper_id?: string | null }) => {
+      if (
+        ev.status === "completed" &&
+        ev.task_type === "summarize" &&
+        expandedId &&
+        ev.paper_id === expandedId
+      ) {
+        void loadPreview(expandedId);
+      }
+    },
+    [expandedId, loadPreview],
+  );
 
-  useEffect(() => {
-    if (!taskPolling) return;
-    const close = subscribeActiveTasks((ev: TaskStreamEvent) => {
-      if (ev.type === "snapshot") {
-        const items = ev.items as IndexTaskRow[];
-        const m = new Map<string, IndexTaskRow>();
-        let anyActive = false;
-        for (const t of items) {
-          const pid = t.paper_id;
-          if (pid) m.set(pid, t);
-          if (t.status === "queued" || t.status === "running") anyActive = true;
-        }
-        setPaperTasks(m);
-        if (!anyActive) {
-          setTaskPolling(false);
-          void refresh();
-        }
-        return;
-      }
-      const pid = ev.paper_id;
-      if (!pid) return;
-      const err = ev.type === "task_status" ? ev.error : undefined;
-      setPaperTasks((prev) => {
-        const next = new Map(prev);
-        const existing = next.get(pid);
-        next.set(pid, {
-          ...(existing ?? {
-            id: ev.task_id,
-            paper_id: pid,
-            task_type: ev.task_type ?? "index",
-            status: ev.status ?? "running",
-          }),
-          id: ev.task_id,
-          paper_id: pid,
-          task_type: ev.task_type ?? existing?.task_type ?? "index",
-          kind: ev.kind ?? existing?.kind,
-          payload: ev.payload ?? existing?.payload,
-          status: ev.status ?? existing?.status ?? "running",
-          progress: ev.progress ?? existing?.progress,
-          error: err ?? existing?.error,
-        });
-        return next;
-      });
-      if (ev.type === "task_status" && ev.status !== "queued" && ev.status !== "running") {
-        void syncActiveTasks();
-        if (
-          ev.status === "completed" &&
-          ev.task_type === "summarize" &&
-          expandedId &&
-          pid === expandedId
-        ) {
-          void loadPreview(expandedId);
-        }
-      }
-    });
-    return close;
-  }, [taskPolling, refresh, syncActiveTasks, expandedId, loadPreview]);
+  useActiveTaskListeners({ onAllIdle: refreshAfterTasks, onTaskFinished });
+
+  const { paperTasks, activeItems, watching, startWatching, sync } = useSharedActiveTasks();
 
   const allSelected = useMemo(
     () => items.length > 0 && items.every((p) => selected.has(p.id)),
@@ -480,13 +441,13 @@ export default function LibraryPage() {
         deduped?: boolean;
         error?: string;
       }>(`/papers/${id}/summarize?lang=zh`, {});
-      setTaskPolling(true);
+      startWatching();
       setMsg(
         res.deduped
           ? `该文献已在摘要队列中（task ${res.task_id?.slice(0, 8) ?? ""}）。`
           : "已加入摘要队列，完成后请刷新详情。",
       );
-      await syncActiveTasks();
+      await sync();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "提交摘要失败");
     }
@@ -500,6 +461,7 @@ export default function LibraryPage() {
         {},
       );
       setMsg(`已同步 Lance：${res.rows ?? 0} 条向量（无需重新分块/嵌入）。`);
+      await refresh();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "同步 Lance 失败");
     }
@@ -531,6 +493,7 @@ export default function LibraryPage() {
           : `全库同步 Lance：${res.synced ?? 0}/${res.matched ?? 0} 篇，共 ${res.rows ?? 0} 条向量${errHint}。`,
       );
       setSelected(new Set());
+      await refresh();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "批量同步 Lance 失败");
     } finally {
@@ -552,13 +515,13 @@ export default function LibraryPage() {
           : `/papers/${id}/index?force=${force}`,
         {},
       );
-      setTaskPolling(true);
+      startWatching();
       setMsg(
         res.deduped
           ? `该文献已在索引队列中（task ${res.task_id?.slice(0, 8) ?? ""}）。`
           : `已加入后台索引队列，可在下方状态栏查看进度。`,
       );
-      await syncActiveTasks();
+      await sync();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "提交索引失败");
     }
@@ -573,13 +536,13 @@ export default function LibraryPage() {
         deduped?: boolean;
         error?: string;
       }>(`/papers/${id}/parse?force=${force}`, {});
-      setTaskPolling(true);
+      startWatching();
       setMsg(
         res.deduped
           ? `该文献已在任务队列中（task ${res.task_id?.slice(0, 8) ?? ""}）。`
           : `已加入后台解析队列（仅写入 parsed/，不分块、不嵌入）。`,
       );
-      await syncActiveTasks();
+      await sync();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "提交解析失败");
     }
@@ -636,7 +599,10 @@ export default function LibraryPage() {
   }
 
   async function enqueueMissing(
-    path: "/papers/index-missing" | "/papers/parse-missing" | "/papers/summarize-missing",
+    path:
+      | "/papers/index-missing"
+      | "/papers/parse-missing"
+      | "/papers/summarize-missing",
     label: string,
   ) {
     setBatchBusy(true);
@@ -647,13 +613,13 @@ export default function LibraryPage() {
         queued?: number;
         failed?: number;
       }>(path, {});
-      setTaskPolling(path !== "/papers/summarize-missing");
+      startWatching();
       setMsg(
         `${label}：匹配 ${res.matched ?? 0} 篇，已入队 ${res.queued ?? 0} 篇` +
-          (res.failed ? `，失败 ${res.failed} 篇` : "") +
+          (res.failed ? `，无法入队 ${res.failed} 篇` : "") +
           "。",
       );
-      await syncActiveTasks();
+      await sync();
       await refresh();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : `${label}失败`);
@@ -699,10 +665,10 @@ export default function LibraryPage() {
         totalFailed > 0
           ? `；无法入队 ${totalFailed} 篇${errSamples.length > 0 ? `：${errSamples.join("；")}` : ""}`
           : "";
-      setTaskPolling(true);
+      startWatching();
       setMsg(`已提交 ${totalQueued} 篇到后台队列，请查看各文献索引状态${errHint}。`);
       setSelected(new Set());
-      await syncActiveTasks();
+      await sync();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "批量提交失败");
     } finally {
@@ -719,10 +685,11 @@ export default function LibraryPage() {
         <strong className="ml-1">批量：</strong>勾选后点「批量 MinerU 索引」。
       </p>
       <TaskStatsPanel
-        autoRefresh={taskPolling}
+        autoRefresh={watching}
+        activeTasks={activeItems}
         onQueueChanged={() => {
-          void refresh();
-          void syncActiveTasks();
+          void refresh({ silent: true });
+          void sync();
         }}
       />
       {qualitySummary && !loading && (
@@ -736,6 +703,13 @@ export default function LibraryPage() {
             高质量 {qualitySummary.high_quality} 篇
           </span>
         </div>
+      )}
+      {batchWorkSummary && !loading && (
+        <BatchWorkSummaryBar
+          summary={batchWorkSummary}
+          activeWorkQueue={workQueueFilter}
+          onWorkQueueChange={setWorkQueueFilter}
+        />
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-ink-950">文献库</h1>
@@ -802,7 +776,7 @@ export default function LibraryPage() {
             disabled={batchBusy}
             onClick={() => void syncLanceIndexed()}
             className="rounded-lg border border-violet-200 px-3 py-2 text-sm text-violet-900 hover:bg-violet-50 disabled:opacity-50"
-            title="从 SQLite 的 scholar 向量写入 LanceDB；不重新解析/分块。已 indexed 且日志出现「复用已有分块」时用此按钮"
+            title="从 SQLite 的 scholar 向量写入 LanceDB；不重新解析/分块。未勾选文献时仅同步「Lance 尚无该篇」的待处理文献；勾选时按所选列表写入（可含已同步篇以强制覆盖）"
           >
             同步 Lance{selected.size > 0 ? `（${selected.size}）` : ""}
           </button>
@@ -914,11 +888,19 @@ export default function LibraryPage() {
               const taskActive = task ? isTaskActive(task.status) : false;
               const isParseTask = taskActive && taskKind === "parse";
               const isIndexTask = taskActive && (taskKind === "index" || taskKind === "reindex");
+              const isSummarizeTask = taskActive && taskKind === "summarize";
               const progressHint =
                 task?.progress?.message ||
-                (task?.status === "queued" ? "排队中" : task?.status === "running" ? "处理中" : undefined);
+                (task?.status === "queued"
+                  ? "排队中"
+                  : task?.status === "running"
+                    ? isSummarizeTask
+                      ? "生成摘要中…"
+                      : "处理中"
+                    : undefined);
               const parseBadgeHint = isParseTask ? progressHint : undefined;
               const indexHint = isIndexTask ? progressHint : undefined;
+              const summarizeHint = isSummarizeTask ? progressHint : undefined;
               const indexValue =
                 p.index_status === "indexing" || isIndexTask ? "indexing" : p.index_status;
               const parseBadgeValue = isParseTask
@@ -954,7 +936,7 @@ export default function LibraryPage() {
                         <StatusBadge label="解析" value={parseBadgeValue} hint={parseBadgeHint} />
                         <StatusBadge label="索引" value={indexValue} hint={indexHint} />
                         <ParseQualityBadge score={p.parse_quality_score} />
-                        <SummaryBadge has={p.has_paper_summary} />
+                        <SummaryBadge has={p.has_paper_summary} hint={summarizeHint} />
                         <button
                           type="button"
                           onClick={() => {

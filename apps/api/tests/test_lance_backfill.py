@@ -2,6 +2,7 @@ import json
 
 from app.config import settings
 from app.db import get_db, init_db
+from app.services.paper_batch import get_batch_work_summary
 from app.services.lance_store import (
     _TABLE,
     backfill_lance_batch,
@@ -40,6 +41,11 @@ def test_backfill_writes_lance_from_sqlite(tmp_path, monkeypatch):
             (cid, pid, 0, "t", 1, None, json.dumps(vec), now),
         )
 
+    s0 = get_batch_work_summary()
+    assert s0["lance_scholar_sqlite_with_vectors"] >= 1
+    assert s0["lance_scholar_in_lance"] == 0
+    assert s0["lance_scholar_papers"] >= 1
+
     res = backfill_paper_vectors_from_db(pid)
     assert res["ok"] is True
     assert res["rows"] == 1
@@ -47,6 +53,11 @@ def test_backfill_writes_lance_from_sqlite(tmp_path, monkeypatch):
     hits = search_scholar(vec, limit=5, allowed_paper_ids={pid})
     assert hits is not None
     assert cid in hits
+
+    s1 = get_batch_work_summary()
+    assert s1["lance_scholar_papers"] == 0
+    assert s1["lance_scholar_sqlite_with_vectors"] >= 1
+    assert s1["lance_scholar_in_lance"] >= 1
 
 
 def test_backfill_batch_counts(tmp_path, monkeypatch):

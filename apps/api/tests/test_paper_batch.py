@@ -1,8 +1,7 @@
-from pathlib import Path
-
 from app.config import settings
 from app.db import get_db
 from app.services.paper_batch import (
+    get_batch_work_summary,
     list_index_missing_ids,
     list_parse_missing_ids,
     list_summarize_missing_ids,
@@ -70,3 +69,18 @@ def test_list_summarize_missing(isolated_test_data_dir):
             (pid,),
         )
     assert pid not in list_summarize_missing_ids()
+
+
+def test_get_batch_work_summary_counts(isolated_test_data_dir):
+    with get_db() as conn:
+        _insert_paper(conn, "idx-miss-a", index_status="pending")
+        _insert_paper(conn, "idx-miss-b", index_status="indexed")
+    s = get_batch_work_summary()
+    assert s["index_missing"] == 1
+    assert s["parse_missing"] == 2
+    assert s["summarize_missing"] == 1
+    assert s["unscored_with_markdown"] == 0
+    assert isinstance(s["lance_scholar_papers"], int)
+    assert isinstance(s["lance_scholar_sqlite_with_vectors"], int)
+    assert isinstance(s["lance_scholar_in_lance"], int)
+    assert "lancedb_enabled" in s

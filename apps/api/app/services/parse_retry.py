@@ -47,6 +47,15 @@ async def maybe_retry_low_quality_parse(
     if score >= threshold:
         return md, meta, report
 
+    if len((md or "").strip()) < 80 or str(meta.get("mode") or "") == "pdf_invalid":
+        plog_info(
+            "parse",
+            "质量分 %.3f 且无可用正文，跳过低分重试 paper_id=%s",
+            score,
+            paper_id,
+        )
+        return md, meta, report
+
     mode = str(meta.get("mode") or "")
     warnings = report.get("warnings") or []
     ocr_bad = "high_ocr_fragment_ratio" in warnings or mode.startswith("pypdf")

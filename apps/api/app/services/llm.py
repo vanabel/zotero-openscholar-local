@@ -95,7 +95,14 @@ def embed_model_id() -> str:
 
 
 class LLMClient:
-    async def chat(self, messages: list[dict[str, str]], temperature: float = 0.2) -> str:
+    async def chat(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.2,
+        *,
+        max_new_tokens: int | None = None,
+        max_input_tokens: int | None = None,
+    ) -> str:
         use_openai = _use_openai_chat()
         use_transformers = _use_transformers_chat()
         provider = _chat_provider_name()
@@ -112,7 +119,12 @@ class LLMClient:
         if use_transformers:
             from app.services.openscholar_chat import chat_transformers
 
-            text = await chat_transformers(messages, temperature)
+            text = await chat_transformers(
+                messages,
+                temperature,
+                max_new_tokens=max_new_tokens,
+                max_input_tokens=max_input_tokens,
+            )
             plog_info("llm", "chat 完成 耗时=%.2fs 输出字符=%s", time.monotonic() - t0, len(text or ""))
             return text
         if use_openai:

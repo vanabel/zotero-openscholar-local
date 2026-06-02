@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -172,6 +173,77 @@ def _papers_where_clause(
     return where, params
 
 
+WORK_QUEUE_VALUES = frozenset(
+    {
+        "index_missing",
+        "parse_missing",
+        "summarize_missing",
+        "unscored_rescore",
+        "lance_scholar",
+    }
+)
+
+
+def _work_queue_extra_clauses(work_queue: str | None) -> tuple[list[str], list]:
+    """
+    与 batch-work-summary / *-missing 入队范围一致的附加筛选。
+    基于 id 列表的队列使用 json_each，避免超长 IN 列表。
+    """
+    if not work_queue:
+        return [], []
+    if work_queue not in WORK_QUEUE_VALUES:
+        raise ValueError(f"invalid work_queue: {work_queue!r}")
+    if work_queue == "index_missing":
+        return ["index_status IN ('pending', 'failed')"], []
+    if work_queue == "summarize_missing":
+        return [
+            "index_status = 'indexed'",
+            "NOT EXISTS (SELECT 1 FROM summaries s WHERE s.paper_id = papers.id AND s.summary_type = 'paper_summary')",
+        ], []
+    if work_queue == "lance_scholar":
+        from app.services.lance_store import list_lance_sync_pending_paper_ids
+
+        ids = list_lance_sync_pending_paper_ids(limit=None)
+        if not ids:
+            return ["1=0"], []
+        return ["id IN (SELECT value FROM json_each(?))"], [json.dumps(ids)]
+    if work_queue == "parse_missing":
+        from app.services.paper_batch import list_parse_missing_ids
+
+        ids = list_parse_missing_ids(limit=None)
+    elif work_queue == "unscored_rescore":
+        from app.services.parse_rescore import list_unscored_with_markdown_ids
+
+        ids = list_unscored_with_markdown_ids(limit=None)
+    else:
+        return [], []
+    if not ids:
+        return ["1=0"], []
+    return ["id IN (SELECT value FROM json_each(?))"], [json.dumps(ids)]
+
+
+def _papers_where_with_work_queue(
+    q: str | None,
+    include_deleted: bool,
+    *,
+    parse_quality_lte: float | None = None,
+    parse_quality_gte: float | None = None,
+    parse_quality_missing: bool = False,
+    work_queue: str | None = None,
+) -> tuple[str, list]:
+    base_where, base_params = _papers_where_clause(
+        q,
+        include_deleted,
+        parse_quality_lte=parse_quality_lte,
+        parse_quality_gte=parse_quality_gte,
+        parse_quality_missing=parse_quality_missing,
+    )
+    w_clauses, w_params = _work_queue_extra_clauses(work_queue)
+    if not w_clauses:
+        return base_where, base_params
+    return f"({base_where}) AND ({' AND '.join(w_clauses)})", [*base_params, *w_params]
+
+
 def _reconcile_paper_status_with_disk(conn, items: list[dict]) -> None:
     from app.services.index_reconcile import reconcile_papers_with_disk
 
@@ -205,13 +277,16 @@ def list_papers(
     parse_quality_gte: float | None = None,
     parse_quality_missing: bool = False,
     sort: str = "updated",
+    work_queue: str | None = None,
+    reconcile: bool = False,
 ) -> list[dict]:
-    where, params = _papers_where_clause(
+    where, params = _papers_where_with_work_queue(
         q,
         include_deleted,
         parse_quality_lte=parse_quality_lte,
         parse_quality_gte=parse_quality_gte,
         parse_quality_missing=parse_quality_missing,
+        work_queue=work_queue,
     )
     order = "updated_at DESC"
     if sort == "quality_asc":
@@ -222,7 +297,8 @@ def list_papers(
         sql = f"SELECT * FROM papers WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?"
         rows = conn.execute(sql, (*params, limit, offset)).fetchall()
         items = [dict(r) for r in rows]
-        _reconcile_paper_status_with_disk(conn, items)
+        if reconcile:
+            _reconcile_paper_status_with_disk(conn, items)
         _attach_paper_summary_flags(conn, items)
         return items
 
@@ -234,13 +310,15 @@ def count_papers(
     parse_quality_lte: float | None = None,
     parse_quality_gte: float | None = None,
     parse_quality_missing: bool = False,
+    work_queue: str | None = None,
 ) -> int:
-    where, params = _papers_where_clause(
+    where, params = _papers_where_with_work_queue(
         q,
         include_deleted,
         parse_quality_lte=parse_quality_lte,
         parse_quality_gte=parse_quality_gte,
         parse_quality_missing=parse_quality_missing,
+        work_queue=work_queue,
     )
     with get_db() as conn:
         row = conn.execute(f"SELECT COUNT(*) AS c FROM papers WHERE {where}", params).fetchone()

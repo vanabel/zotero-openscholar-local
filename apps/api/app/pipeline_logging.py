@@ -6,17 +6,65 @@
 - PIPELINE_LOG：0=关闭流水线专用日志；1=简要（INFO）；2=详细（DEBUG）。
 - LOG_STAGES：可选，逗号分隔子阶段，只输出这些；留空或 all 表示不筛选。
   阶段名：retrieve, embed, rag, llm, review, scan, index, parse, translate, cache
+- LOG_CONTEXT：1（默认）时在每条日志前附加当前 task_id / paper_id（多任务并发时便于 grep）。
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from typing import Pattern
+from contextlib import contextmanager
+from contextvars import ContextVar, Token
+from typing import Iterator, Pattern
 
 from app.config import settings
 
-_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+_paper_id: ContextVar[str | None] = ContextVar("pipeline_log_paper_id", default=None)
+_task_id: ContextVar[str | None] = ContextVar("pipeline_log_task_id", default=None)
+
+_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(log_ctx)s%(message)s"
+
+
+class _PipelineContextFilter(logging.Filter):
+    """从 contextvars 注入 log_ctx，便于多 worker / 多文献并发时按行区分。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.log_ctx = _format_log_ctx()  # type: ignore[attr-defined]
+        return True
+
+
+def _format_log_ctx() -> str:
+    if not settings.log_context:
+        return ""
+    parts: list[str] = []
+    pid = _paper_id.get()
+    tid = _task_id.get()
+    if tid:
+        parts.append(f"task={tid[:8]}")
+    if pid:
+        parts.append(f"paper={pid[:8]}")
+    if not parts:
+        return ""
+    return " ".join(parts) + " | "
+
+
+@contextmanager
+def log_context(
+    *,
+    paper_id: str | None = None,
+    task_id: str | None = None,
+) -> Iterator[None]:
+    """在任务 / index_paper 作用域内设置日志上下文（asyncio 任务与 to_thread 会继承）。"""
+    tokens: list[tuple[ContextVar[str | None], Token]] = []
+    if paper_id is not None:
+        tokens.append((_paper_id, _paper_id.set(paper_id)))
+    if task_id is not None:
+        tokens.append((_task_id, _task_id.set(task_id)))
+    try:
+        yield
+    finally:
+        for var, tok in reversed(tokens):
+            var.reset(tok)
 
 
 def setup_logging() -> None:
@@ -25,7 +73,13 @@ def setup_logging() -> None:
     if not root.handlers:
         h = logging.StreamHandler()
         h.setFormatter(logging.Formatter(_FORMAT))
+        h.addFilter(_PipelineContextFilter())
         root.addHandler(h)
+    else:
+        for h in root.handlers:
+            if not any(isinstance(f, _PipelineContextFilter) for f in h.filters):
+                h.addFilter(_PipelineContextFilter())
+            h.setFormatter(logging.Formatter(_FORMAT))
 
     level = getattr(logging, (settings.log_level or "INFO").upper(), logging.INFO)
     root.setLevel(level)

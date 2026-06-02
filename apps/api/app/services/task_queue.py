@@ -7,11 +7,22 @@ from datetime import datetime, timezone
 from app.db import get_db, json_dumps_safe, row_to_dict
 from app.services.zotero_scanner import get_paper
 from app.config import settings
-from app.pipeline_logging import plog_info
+from app.pipeline_logging import log_context, plog_info
 
 _worker_task: asyncio.Task | None = None
 _queue: asyncio.Queue[str] = asyncio.Queue()
 ACTIVE_STATUSES = ("queued", "running")
+
+_TASK_KIND_SQL = """
+  CASE
+    WHEN task_type = 'summarize' THEN 'summarize'
+    WHEN task_type = 'index' AND COALESCE(json_extract(payload_json, '$.parse_only'), 0) THEN 'parse'
+    WHEN task_type = 'index' AND COALESCE(json_extract(payload_json, '$.reindex_only'), 0) THEN 'reindex'
+    WHEN task_type = 'index' AND COALESCE(json_extract(payload_json, '$.mineru_download_only'), 0) THEN 'mineru_download'
+    WHEN task_type = 'index' THEN 'index'
+    ELSE task_type
+  END
+"""
 
 _ORPHAN_PENDING_WHERE = """
     t.status IN ('queued', 'running')
@@ -26,19 +37,45 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _iso_duration_sec(started_at: str, ended_at: str) -> float:
+    try:
+        a = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        b = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
+        return max(0.0, (b - a).total_seconds())
+    except (TypeError, ValueError, OSError):
+        return 0.0
+
+
+def _phase_history_entry(
+    phase: str,
+    started_at: str,
+    ended_at: str,
+    done: int,
+    total: int,
+) -> dict:
+    return {
+        "phase": phase,
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "duration_sec": round(_iso_duration_sec(started_at, ended_at), 2),
+        "done": done,
+        "total": total,
+    }
+
+
 class TaskProgress:
     """向 tasks 表写入阶段进度（供前端轮询）。"""
 
     def __init__(self, task_id: str) -> None:
         self.task_id = task_id
 
-    def update(self, phase: str, done: int, total: int, message: str = "") -> None:
-        payload = {
-            "phase": phase,
-            "done": done,
-            "total": total,
-            "message": message or _default_message(phase, done, total),
-        }
+    def _load_progress(self) -> dict | None:
+        row = _task_row(self.task_id)
+        if not row:
+            return None
+        return _parse_json_field(row.get("progress_json"))
+
+    def _save_progress(self, payload: dict) -> None:
         now = _utc_now()
         with get_db() as conn:
             conn.execute(
@@ -64,6 +101,54 @@ class TaskProgress:
                 }
             )
 
+    def update(self, phase: str, done: int, total: int, message: str = "") -> None:
+        now = _utc_now()
+        prev = self._load_progress()
+        history = list((prev or {}).get("phase_history") or [])
+        prev_phase = (prev or {}).get("phase") if prev else None
+        if prev_phase is not None and prev_phase != phase:
+            history.append(
+                _phase_history_entry(
+                    str(prev_phase),
+                    str((prev or {}).get("phase_started_at") or now),
+                    now,
+                    int((prev or {}).get("done") or 0),
+                    int((prev or {}).get("total") or 0),
+                )
+            )
+        phase_started_at = (
+            (prev or {}).get("phase_started_at") or now if prev_phase == phase else now
+        )
+        task_started_at = (prev or {}).get("task_started_at") or now
+        payload = {
+            "phase": phase,
+            "done": done,
+            "total": total,
+            "message": message or _default_message(phase, done, total),
+            "phase_started_at": phase_started_at,
+            "task_started_at": task_started_at,
+            "phase_history": history,
+        }
+        self._save_progress(payload)
+
+    def finalize_phase(self) -> dict:
+        """将当前阶段写入 phase_history（任务完成前调用）。"""
+        prev = self._load_progress() or {}
+        now = _utc_now()
+        history = list(prev.get("phase_history") or [])
+        phase = prev.get("phase")
+        if phase and phase not in ("done",):
+            history.append(
+                _phase_history_entry(
+                    str(phase),
+                    str(prev.get("phase_started_at") or now),
+                    now,
+                    int(prev.get("done") or 0),
+                    int(prev.get("total") or 0),
+                )
+            )
+        return {**prev, "phase_history": history}
+
 
 def _default_message(phase: str, done: int, total: int) -> str:
     labels = {
@@ -71,7 +156,7 @@ def _default_message(phase: str, done: int, total: int) -> str:
         "parse": "PDF 解析",
         "chunk": "分块",
         "embed": "向量嵌入",
-        "scholar_embed": "OpenScholar 嵌入",
+        "scholar_embed": "OpenScholar Retriever 嵌入",
         "save": "写入索引",
         "summarize": "生成摘要",
         "done": "完成",
@@ -105,11 +190,12 @@ def task_to_api(row: dict) -> dict:
     payload = _parse_json_field(row.get("payload_json"))
     result = _parse_json_field(row.get("result_json"))
     tt = row["task_type"]
-    return {
+    out = {
         "id": row["id"],
         "task_type": tt,
         "kind": task_kind(task_type=tt, payload=payload),
         "paper_id": row.get("paper_id"),
+        "paper_title": row.get("paper_title"),
         "status": row["status"],
         "error": row.get("error"),
         "progress": progress,
@@ -118,11 +204,111 @@ def task_to_api(row: dict) -> dict:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+    return out
 
 
 def get_task(task_id: str) -> dict | None:
     row = _task_row(task_id)
     return task_to_api(row) if row else None
+
+
+def compute_queue_throughput(conn) -> dict | None:
+    """当前待处理批次：统计同批已完成数与真实耗时均值（恢复旧队列时不用过期入队时间）。"""
+    pr = conn.execute(
+        """
+        SELECT MIN(created_at) AS oldest, MAX(created_at) AS newest
+        FROM tasks
+        WHERE status IN ('queued', 'running')
+        """
+    ).fetchone()
+    if not pr or not pr["oldest"]:
+        return None
+
+    batch_start = pr["oldest"]
+    batch_end = pr["newest"]
+    # 同批入队窗口；恢复队列时 pending 为新 created_at，已完成项用 updated_at 纳入统计
+    batch_where = """
+      status = 'completed'
+      AND (
+        (created_at >= ? AND created_at <= ?)
+        OR updated_at >= ?
+      )
+    """
+    batch_args = (batch_start, batch_end, batch_start)
+
+    completed_count = conn.execute(
+        f"SELECT COUNT(*) AS c FROM tasks WHERE {batch_where}",
+        batch_args,
+    ).fetchone()["c"]
+
+    throughput_started_at = conn.execute(
+        f"SELECT MIN(updated_at) AS first_at FROM tasks WHERE {batch_where}",
+        batch_args,
+    ).fetchone()["first_at"]
+
+    duration_sec_expr = """
+      CASE
+        WHEN json_extract(progress_json, '$.task_started_at') IS NOT NULL
+        THEN MAX(
+          0.0,
+          (julianday(updated_at) - julianday(json_extract(progress_json, '$.task_started_at'))) * 86400.0
+        )
+        ELSE MAX(0.0, (julianday(updated_at) - julianday(created_at)) * 86400.0)
+      END
+    """
+
+    avg_row = conn.execute(
+        f"SELECT AVG({duration_sec_expr}) AS avg_sec FROM tasks WHERE {batch_where}",
+        batch_args,
+    ).fetchone()
+    avg_duration_sec = (
+        round(float(avg_row["avg_sec"]), 2)
+        if avg_row and avg_row["avg_sec"] is not None
+        else None
+    )
+
+    by_kind_rows = conn.execute(
+        f"""
+        SELECT {_TASK_KIND_SQL} AS kind, COUNT(*) AS c
+        FROM tasks
+        WHERE {batch_where}
+        GROUP BY kind
+        """,
+        batch_args,
+    ).fetchall()
+    kind_first_rows = conn.execute(
+        f"""
+        SELECT {_TASK_KIND_SQL} AS kind, MIN(updated_at) AS first_at
+        FROM tasks
+        WHERE {batch_where}
+        GROUP BY kind
+        """,
+        batch_args,
+    ).fetchall()
+    kind_avg_rows = conn.execute(
+        f"""
+        SELECT {_TASK_KIND_SQL} AS kind, AVG({duration_sec_expr}) AS avg_sec
+        FROM tasks
+        WHERE {batch_where}
+        GROUP BY kind
+        """,
+        batch_args,
+    ).fetchall()
+
+    return {
+        "batch_started_at": batch_start,
+        "batch_ended_at": batch_end,
+        "throughput_started_at": throughput_started_at,
+        "completed_count": int(completed_count),
+        "completed_by_kind": {r["kind"]: int(r["c"]) for r in by_kind_rows},
+        "kind_first_completed_at": {r["kind"]: r["first_at"] for r in kind_first_rows},
+        "avg_duration_sec": avg_duration_sec,
+        "avg_duration_sec_by_kind": {
+            r["kind"]: round(float(r["avg_sec"]), 2)
+            for r in kind_avg_rows
+            if r["avg_sec"] is not None
+        },
+    }
 
 
 def get_task_stats(*, failed_limit: int = 10) -> dict:
@@ -211,6 +397,7 @@ def get_task_stats(*, failed_limit: int = 10) -> dict:
         orphan_pending = conn.execute(
             f"SELECT COUNT(*) AS c FROM tasks t WHERE {_ORPHAN_PENDING_WHERE}"
         ).fetchone()["c"]
+        queue_throughput = compute_queue_throughput(conn)
         failed_rows = []
         if failed_limit:
             failed_rows = conn.execute(
@@ -227,6 +414,8 @@ def get_task_stats(*, failed_limit: int = 10) -> dict:
         "total": total,
         "pending": pending,
         "worker_concurrency": max(1, int(settings.task_worker_concurrency)),
+        "index_embed_concurrency": max(1, int(settings.index_embed_concurrency)),
+        "mineru_parse_concurrency": max(1, int(settings.mineru_parse_concurrency)),
         "by_status": by_status,
         "by_type": by_type,
         "by_type_status": by_type_status,
@@ -238,6 +427,7 @@ def get_task_stats(*, failed_limit: int = 10) -> dict:
             else None
         ),
         "orphan_pending": orphan_pending,
+        "queue_throughput": queue_throughput,
         "failed_samples": [
             {
                 "id": r["id"],
@@ -346,25 +536,52 @@ def cancel_orphan_pending_tasks() -> dict:
     return {"cancelled": cancelled, "failed": failed}
 
 
+def purge_terminal_tasks(*, statuses: tuple[str, ...] = ("failed", "cancelled")) -> dict:
+    """删除终态任务记录（默认 failed / cancelled），减轻 tasks 表体积与统计查询开销。"""
+    if not statuses:
+        return {"deleted": 0, "failed": 0, "cancelled": 0}
+    ph = ",".join("?" * len(statuses))
+    with get_db() as conn:
+        rows = conn.execute(
+            f"SELECT status, COUNT(*) AS c FROM tasks WHERE status IN ({ph}) GROUP BY status",
+            list(statuses),
+        ).fetchall()
+        cur = conn.execute(f"DELETE FROM tasks WHERE status IN ({ph})", list(statuses))
+        deleted = int(cur.rowcount)
+    by_status = {str(r["status"]): int(r["c"]) for r in rows}
+    plog_info("task", "清理终态任务 deleted=%s breakdown=%s", deleted, by_status)
+    return {
+        "deleted": deleted,
+        "failed": by_status.get("failed", 0),
+        "cancelled": by_status.get("cancelled", 0),
+    }
+
+
+_ACTIVE_TASKS_SQL = """
+    SELECT t.*, p.title AS paper_title
+    FROM tasks t
+    LEFT JOIN papers p ON p.id = t.paper_id AND p.deleted = 0
+    WHERE t.status IN ('queued', 'running')
+"""
+
+
 def list_active_tasks(*, paper_ids: list[str] | None = None) -> list[dict]:
     with get_db() as conn:
         if paper_ids:
             placeholders = ",".join("?" * len(paper_ids))
             rows = conn.execute(
                 f"""
-                SELECT * FROM tasks
-                WHERE status IN ('queued', 'running')
-                  AND paper_id IN ({placeholders})
-                ORDER BY created_at ASC
+                {_ACTIVE_TASKS_SQL}
+                  AND t.paper_id IN ({placeholders})
+                ORDER BY CASE t.status WHEN 'running' THEN 0 ELSE 1 END, t.created_at ASC
                 """,
                 paper_ids,
             ).fetchall()
         else:
             rows = conn.execute(
-                """
-                SELECT * FROM tasks
-                WHERE status IN ('queued', 'running')
-                ORDER BY created_at ASC
+                f"""
+                {_ACTIVE_TASKS_SQL}
+                ORDER BY CASE t.status WHEN 'running' THEN 0 ELSE 1 END, t.created_at ASC
                 """
             ).fetchall()
     return [task_to_api(row_to_dict(r)) for r in rows]
@@ -383,24 +600,96 @@ def _find_active_index_task(paper_id: str) -> str | None:
     return row["id"] if row else None
 
 
+def _index_enqueue_intent(
+    *,
+    force: bool,
+    reindex_only: bool,
+    parse_only: bool,
+    mineru_download_only: bool,
+) -> tuple[bool, bool, bool, bool]:
+    """与 payload 一致的四元组，用于判断是否与已有排队任务相同。"""
+    return (bool(force), bool(reindex_only), bool(parse_only), bool(mineru_download_only))
+
+
+def _intent_from_index_payload(pl: dict | None) -> tuple[bool, bool, bool, bool]:
+    if not pl:
+        return (False, False, False, False)
+    return (
+        bool(pl.get("force")),
+        bool(pl.get("reindex_only")),
+        bool(pl.get("parse_only")),
+        bool(pl.get("mineru_download_only")),
+    )
+
+
 def enqueue_index_task(
     paper_id: str,
     *,
     force: bool = False,
     reindex_only: bool = False,
     parse_only: bool = False,
+    mineru_download_only: bool = False,
 ) -> dict:
     paper = get_paper(paper_id)
     if not paper or paper.get("deleted"):
         return {"ok": False, "error": "文献不存在或已归档"}
     existing = _find_active_index_task(paper_id)
     if existing:
-        t = get_task(existing)
-        return {"task_id": existing, "status": t["status"] if t else "queued", "deduped": True}
+        row = _task_row(existing)
+        if row:
+            pl = _parse_json_field(row.get("payload_json"))
+            old_intent = _intent_from_index_payload(pl)
+            new_intent = _index_enqueue_intent(
+                force=force,
+                reindex_only=reindex_only,
+                parse_only=parse_only,
+                mineru_download_only=mineru_download_only,
+            )
+            if old_intent == new_intent:
+                t = get_task(existing)
+                return {"task_id": existing, "status": t["status"] if t else "queued", "deduped": True}
+            if row.get("status") == "running":
+                return {
+                    "ok": False,
+                    "error": "该文献已有进行中的后台任务，请等待完成后再提交。",
+                    "deduped": False,
+                }
+            # 排队中但意图不同：取消旧排队，下面重新 INSERT
+            if row.get("status") == "queued":
+                now = _utc_now()
+                with get_db() as conn:
+                    conn.execute(
+                        """
+                        UPDATE tasks SET status = 'cancelled', error = ?, updated_at = ?
+                        WHERE id = ? AND status = 'queued'
+                        """,
+                        ("已由同文献的新入队请求替换", now, existing),
+                    )
+                _publish_task_status(
+                    existing, status="cancelled", error="已由同文献的新入队请求替换"
+                )
+                plog_info(
+                    "task",
+                    "取消旧排队 index 任务以替换入队 old_task_id=%s paper_id=%s",
+                    existing,
+                    paper_id,
+                )
+            else:
+                plog_info(
+                    "task",
+                    "活动 index 任务状态异常 task_id=%s status=%s，将重新入队",
+                    existing,
+                    row.get("status"),
+                )
 
     task_id = uuid.uuid4().hex
     now = _utc_now()
-    payload = {"force": force, "reindex_only": reindex_only, "parse_only": parse_only}
+    payload = {
+        "force": force,
+        "reindex_only": reindex_only,
+        "parse_only": parse_only,
+        "mineru_download_only": mineru_download_only,
+    }
     progress = {"phase": "queued", "done": 0, "total": 0, "message": "排队中"}
     with get_db() as conn:
         conn.execute(
@@ -424,13 +713,14 @@ def enqueue_index_task(
                 now,
             ),
         )
-        if parse_only:
+        if parse_only or mineru_download_only:
+            msg = "MinerU 下载重试排队中" if mineru_download_only else "解析任务排队中"
             conn.execute(
                 """
                 UPDATE papers SET status_message = ?, updated_at = ?
                 WHERE id = ? AND deleted = 0
                 """,
-                ("解析任务排队中", now, paper_id),
+                (msg, now, paper_id),
             )
         else:
             conn.execute(
@@ -455,9 +745,16 @@ def enqueue_index_batch(
     force: bool = False,
     reindex_only: bool = False,
     parse_only: bool = False,
+    mineru_download_only: bool = False,
 ) -> list[dict]:
     return [
-        enqueue_index_task(pid, force=force, reindex_only=reindex_only, parse_only=parse_only)
+        enqueue_index_task(
+            pid,
+            force=force,
+            reindex_only=reindex_only,
+            parse_only=parse_only,
+            mineru_download_only=mineru_download_only,
+        )
         for pid in paper_ids
     ]
 
@@ -537,10 +834,17 @@ async def _run_summarize_task(task_id: str) -> None:
             "UPDATE tasks SET status = 'running', updated_at = ? WHERE id = ?",
             (now, task_id),
         )
-    progress.update("summarize", 0, 1, "生成摘要中…")
+    progress.update("summarize", 0, 1, "开始生成摘要…")
     try:
         result = await generate_paper_summary(paper_id, lang=lang)
         if result.get("ok"):
+            done_progress = {
+                **progress.finalize_phase(),
+                "phase": "done",
+                "done": 1,
+                "total": 1,
+                "message": "完成",
+            }
             with get_db() as conn:
                 conn.execute(
                     """
@@ -550,7 +854,7 @@ async def _run_summarize_task(task_id: str) -> None:
                     """,
                     (
                         json_dumps_safe(result),
-                        json_dumps_safe({"phase": "done", "done": 1, "total": 1, "message": "完成"}),
+                        json_dumps_safe(done_progress),
                         _utc_now(),
                         task_id,
                     ),
@@ -578,6 +882,7 @@ async def _run_index_task(task_id: str) -> None:
     force = bool(payload.get("force"))
     reindex_only = bool(payload.get("reindex_only"))
     parse_only = bool(payload.get("parse_only"))
+    mineru_download_only = bool(payload.get("mineru_download_only"))
     progress = TaskProgress(task_id)
     now = _utc_now()
     with get_db() as conn:
@@ -592,10 +897,18 @@ async def _run_index_task(task_id: str) -> None:
             force=force,
             reindex_only=reindex_only,
             parse_only=parse_only,
+            mineru_download_only=mineru_download_only,
             progress=progress,
         )
         if result.get("ok"):
             done_msg = "解析完成" if parse_only else "完成"
+            done_progress = {
+                **progress.finalize_phase(),
+                "phase": "done",
+                "done": 1,
+                "total": 1,
+                "message": done_msg,
+            }
             with get_db() as conn:
                 conn.execute(
                     """
@@ -605,7 +918,7 @@ async def _run_index_task(task_id: str) -> None:
                     """,
                     (
                         json_dumps_safe(result),
-                        json_dumps_safe({"phase": "done", "done": 1, "total": 1, "message": done_msg}),
+                        json_dumps_safe(done_progress),
                         _utc_now(),
                         task_id,
                     ),
@@ -706,7 +1019,10 @@ async def _worker_loop() -> None:
         while True:
             task_id = await _queue.get()
             try:
-                await _dispatch_task(task_id)
+                row = _task_row(task_id)
+                paper_id = (row or {}).get("paper_id") if row else None
+                with log_context(task_id=task_id, paper_id=paper_id or None):
+                    await _dispatch_task(task_id)
             finally:
                 _queue.task_done()
 
@@ -737,6 +1053,12 @@ def start_worker(*, standalone: bool = False) -> None:
     _resume_queued_tasks()
     if _worker_task is None or _worker_task.done():
         n = max(1, int(settings.task_worker_concurrency))
+        if settings.resolved_chat_provider() == "transformers":
+            plog_info(
+                "task",
+                "Transformers 对话：任务并发=%s（GPU 推理串行，勿靠提高 TASK_WORKER_CONCURRENCY 加速）",
+                n,
+            )
         plog_info("task", "启动 embedded Worker concurrency=%s", n)
         _worker_task = asyncio.create_task(_worker_loop(), name="index-task-worker")
 

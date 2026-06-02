@@ -26,6 +26,55 @@ class MinerUCloudError(Exception):
     pass
 
 
+# done, total, message → 写入 tasks.progress_json（供前端 SSE）
+ReportParseProgress = Callable[[int, int, str], None]
+
+
+def _emit_parse_progress(
+    report: ReportParseProgress | None,
+    *,
+    done: int,
+    total: int,
+    message: str,
+) -> None:
+    if not report:
+        return
+    report(max(0, done), max(1, total), message)
+
+
+def _chunk_book_progress(
+    report: ReportParseProgress,
+    *,
+    book_page_offset: int,
+    chunk_pages: int,
+    book_total: int,
+    chunk_index: int,
+    num_chunks: int,
+) -> ReportParseProgress:
+    """将单切片轮询进度映射为全书页码。"""
+
+    def inner(slice_done: int, slice_total: int, msg: str) -> None:
+        if "下载" in msg or "zip" in msg.lower():
+            book_done = book_page_offset + chunk_pages
+            pct = int(book_done * 100 / book_total) if book_total > 0 else 0
+            report(
+                book_done,
+                book_total,
+                f"MinerU 分段 {chunk_index + 1}/{num_chunks}：下载结果 zip（全书约 {pct}%）",
+            )
+            return
+        book_done = book_page_offset + min(slice_done, chunk_pages)
+        short = _format_extract_progress_short(slice_done, slice_total)
+        pct = int(book_done * 100 / book_total) if book_total > 0 else 0
+        report(
+            book_done,
+            book_total,
+            f"MinerU 分段 {chunk_index + 1}/{num_chunks}：{short}（全书约 {pct}%）",
+        )
+
+    return inner
+
+
 def _base_url() -> str:
     return (settings.mineru_api_base_url or "https://mineru.net").rstrip("/")
 
@@ -266,7 +315,13 @@ def _should_log_poll_stall(
     return now - last_log_at >= heartbeat_sec
 
 
-def _poll_batch_done(client: httpx.Client, batch_id: str, file_name: str) -> str:
+def _poll_batch_done(
+    client: httpx.Client,
+    batch_id: str,
+    file_name: str,
+    *,
+    report_progress: ReportParseProgress | None = None,
+) -> str:
     """轮询批量任务，返回 full_zip_url。"""
     deadline = time.monotonic() + float(settings.parse_timeout_sec)
     interval = max(2.0, float(settings.mineru_cloud_poll_interval_sec))
@@ -314,6 +369,7 @@ def _poll_batch_done(client: httpx.Client, batch_id: str, file_name: str) -> str
         progress = item.get("extract_progress")
         extracted, total = _parse_extract_progress(progress)
         now = time.monotonic()
+        progress_msg = f"MinerU 云端解析中 {_format_extract_progress_short(extracted, total)}"
         if not poll_announced:
             plog_info(
                 "parse",
@@ -324,6 +380,13 @@ def _poll_batch_done(client: httpx.Client, batch_id: str, file_name: str) -> str
             poll_announced = True
             last_extracted = extracted
             last_log_at = now
+            if total and total > 0:
+                _emit_parse_progress(
+                    report_progress,
+                    done=extracted or 0,
+                    total=total,
+                    message=progress_msg,
+                )
         elif _should_log_poll_progress(
             extracted=extracted,
             total=total,
@@ -337,6 +400,13 @@ def _poll_batch_done(client: httpx.Client, batch_id: str, file_name: str) -> str
                 _format_extract_progress_short(extracted, total),
                 state,
             )
+            if total and total > 0:
+                _emit_parse_progress(
+                    report_progress,
+                    done=extracted or 0,
+                    total=total,
+                    message=progress_msg,
+                )
             last_extracted = extracted
             last_log_at = now
         elif (
@@ -383,6 +453,130 @@ def _download_mineru_zip_bytes(client: httpx.Client, zip_url: str) -> bytes:
         return zr.content
 
     return _cloud_request_with_retry("下载结果 zip", _get_zip, hint=_url_host_hint(zip_url))
+
+
+MINERU_PENDING_FILENAME = "mineru_pending.json"
+
+
+def save_mineru_download_pending(
+    out_dir: Path,
+    *,
+    batch_id: str,
+    zip_url: str,
+    file_name: str,
+    paper_id: str,
+) -> None:
+    """云端解析已完成、待下载 zip 时写入，供「仅重试下载」使用。"""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": 1,
+        "batch_id": batch_id,
+        "zip_url": zip_url,
+        "file_name": file_name,
+        "paper_id": paper_id,
+        "saved_at": time.time(),
+    }
+    (out_dir / MINERU_PENDING_FILENAME).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def clear_mineru_download_pending(out_dir: Path) -> None:
+    try:
+        (out_dir / MINERU_PENDING_FILENAME).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def load_mineru_download_pending(out_dir: Path) -> dict | None:
+    path = out_dir / MINERU_PENDING_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _get_batch_zip_url_once(client: httpx.Client, batch_id: str, file_name: str) -> str | None:
+    """批量任务已完成时取 full_zip_url（不重传 PDF）。"""
+    url = f"{_base_url()}/api/v4/extract-results/batch/{batch_id}"
+    poll_hint = f" batch_id={batch_id[:8]}"
+
+    def _fetch() -> dict:
+        return _api_json(client.get(url, headers=_headers(), timeout=60.0))
+
+    data = _cloud_request_with_retry("解析结果查询", _fetch, hint=poll_hint)
+    results = data.get("extract_result")
+    if not isinstance(results, list):
+        return None
+    item = None
+    for r in results:
+        if isinstance(r, dict) and r.get("file_name") == file_name:
+            item = r
+            break
+    if item is None and len(results) == 1 and isinstance(results[0], dict):
+        item = results[0]
+    if not item:
+        return None
+    state = (item.get("state") or "").lower()
+    if state == "done":
+        z = item.get("full_zip_url")
+        return str(z) if z else None
+    if state == "failed":
+        raise MinerUCloudError(item.get("err_msg") or "MinerU 云端解析失败")
+    return None
+
+
+def finish_mineru_download_from_pending(out_dir: Path, pending: dict | None = None) -> str:
+    """
+    从 mineru_pending.json 记录的 zip_url（或 batch_id 重新查询）下载并解压 Markdown。
+    不重新上传 PDF。
+    """
+    data = pending if pending is not None else load_mineru_download_pending(out_dir)
+    if not data:
+        raise MinerUCloudError("无 mineru_pending.json，无法仅重试下载（请使用「重试解析」重新提交 MinerU）")
+    batch_id = str(data.get("batch_id") or "").strip()
+    zip_url = str(data.get("zip_url") or "").strip()
+    file_name = str(data.get("file_name") or "document.pdf").strip() or "document.pdf"
+    if not zip_url and not batch_id:
+        raise MinerUCloudError("mineru_pending.json 缺少 zip_url 与 batch_id")
+
+    timeout = httpx.Timeout(600.0, connect=30.0)
+    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+        last: MinerUCloudError | None = None
+        if zip_url:
+            try:
+                plog_info("parse", "MinerU 仅重试下载 zip %s", _url_host_hint(zip_url))
+                zip_bytes = _download_mineru_zip_bytes(client, zip_url)
+                md = _markdown_from_zip(zip_bytes, out_dir)
+                clear_mineru_download_pending(out_dir)
+                return md
+            except MinerUCloudError as e:
+                last = e
+                plog_info("parse", "MinerU 已存 zip_url 下载失败，尝试 batch 刷新 URL: %s", e)
+
+        if batch_id:
+            fresh = _get_batch_zip_url_once(client, batch_id, file_name)
+            if fresh and fresh != zip_url:
+                try:
+                    plog_info("parse", "MinerU 仅重试下载 zip（batch 刷新）%s", _url_host_hint(fresh))
+                    zip_bytes = _download_mineru_zip_bytes(client, fresh)
+                    md = _markdown_from_zip(zip_bytes, out_dir)
+                    clear_mineru_download_pending(out_dir)
+                    return md
+                except MinerUCloudError as e:
+                    last = e
+            elif not zip_url and not fresh:
+                raise MinerUCloudError(
+                    "无法从 MinerU 批量任务获取 full_zip_url（任务可能已过期，请重试解析）"
+                )
+
+        if last:
+            raise last
+        raise MinerUCloudError("mineru_pending.json 缺少可用的 zip_url / batch_id")
 
 
 def _markdown_from_zip(zip_bytes: bytes, out_dir: Path) -> str:
@@ -562,6 +756,7 @@ def _parse_pdf_via_cloud_chunked(
     force_reparse: bool = False,
     pdf_sha256: str | None = None,
     model_version: str | None = None,
+    report_progress: ReportParseProgress | None = None,
 ) -> tuple[str, dict]:
     max_p = int(settings.mineru_cloud_max_pages_per_chunk)
     chunks_root = out_dir / "_mineru_cloud_chunks"
@@ -702,11 +897,36 @@ def _parse_pdf_via_cloud_chunked(
                     p0 + 1,
                     p1,
                 )
+                _emit_parse_progress(
+                    report_progress,
+                    done=p0,
+                    total=n,
+                    message=(
+                        f"MinerU 分段 {ci + 1}/{num_chunks}："
+                        f"上传切片 {chunk_pages} 页（原书第 {p0 + 1}–{p1} 页）"
+                    ),
+                )
 
                 chunk_out.mkdir(parents=True, exist_ok=True)
                 chunk_id = f"{paper_id}_c{ci}"
+                chunk_report = (
+                    _chunk_book_progress(
+                        report_progress,
+                        book_page_offset=p0,
+                        chunk_pages=chunk_pages,
+                        book_total=n,
+                        chunk_index=ci,
+                        num_chunks=num_chunks,
+                    )
+                    if report_progress
+                    else None
+                )
                 md_i, part_meta = parse_pdf_via_cloud(
-                    chunk_file, chunk_id, chunk_out, model_version=model_version
+                    chunk_file,
+                    chunk_id,
+                    chunk_out,
+                    model_version=model_version,
+                    report_progress=chunk_report,
                 )
                 if part_meta.get("mineru_batch_id"):
                     meta[f"mineru_batch_id_c{ci}"] = part_meta["mineru_batch_id"]
@@ -752,6 +972,7 @@ def parse_pdf_via_cloud_with_splitting(
     force_reparse: bool = False,
     pdf_sha256: str | None = None,
     model_version: str | None = None,
+    report_progress: ReportParseProgress | None = None,
 ) -> tuple[str, dict]:
     """
     云端解析：未超页数则整份上传；超过 MINERU_CLOUD_MAX_PAGES_PER_CHUNK 时先用 pypdf 切片再合并结果。
@@ -760,10 +981,17 @@ def parse_pdf_via_cloud_with_splitting(
     """
     max_p = int(settings.mineru_cloud_max_pages_per_chunk)
     n: int | None = None
-    try:
-        n = _pdf_page_count(pdf_path)
-    except Exception as ex:
-        plog_info("parse", "无法读取 PDF 页数，将先尝试整份上传 MinerU 云端: %s", ex)
+    from app.services.pdf_parse import inspect_pdf
+
+    pdf_err, counted = inspect_pdf(pdf_path)
+    if pdf_err:
+        raise MinerUCloudError(pdf_err)
+    n = counted
+    if n is None:
+        try:
+            n = _pdf_page_count(pdf_path)
+        except Exception as ex:
+            plog_info("parse", "无法读取 PDF 页数，将先尝试整份上传 MinerU 云端: %s", ex)
 
     if n is not None and n > max_p:
         plog_info(
@@ -772,6 +1000,13 @@ def parse_pdf_via_cloud_with_splitting(
             n,
             max_p,
         )
+        if report_progress:
+            _emit_parse_progress(
+                report_progress,
+                done=0,
+                total=n,
+                message=f"MinerU 云端分段解析（全书 {n} 页）",
+            )
         return _parse_pdf_via_cloud_chunked(
             pdf_path,
             paper_id,
@@ -779,10 +1014,17 @@ def parse_pdf_via_cloud_with_splitting(
             force_reparse=force_reparse,
             pdf_sha256=pdf_sha256,
             model_version=model_version,
+            report_progress=report_progress,
         )
 
     try:
-        return parse_pdf_via_cloud(pdf_path, paper_id, out_dir, model_version=model_version)
+        return parse_pdf_via_cloud(
+            pdf_path,
+            paper_id,
+            out_dir,
+            model_version=model_version,
+            report_progress=report_progress,
+        )
     except MinerUCloudError as e:
         if _is_cloud_page_limit_error(e):
             plog_info("parse", "MinerU 云端页数限制，改为切片解析: %s", e)
@@ -793,6 +1035,7 @@ def parse_pdf_via_cloud_with_splitting(
                 force_reparse=force_reparse,
                 pdf_sha256=pdf_sha256,
                 model_version=model_version,
+                report_progress=report_progress,
             )
         raise
 
@@ -803,6 +1046,7 @@ def parse_pdf_via_cloud(
     out_dir: Path,
     *,
     model_version: str | None = None,
+    report_progress: ReportParseProgress | None = None,
 ) -> tuple[str, dict]:
     """
     通过 MinerU 在线 API 解析本地 PDF，写入 out_dir/document.md。
@@ -819,11 +1063,36 @@ def parse_pdf_via_cloud(
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
             batch_id = _upload_and_submit(client, pdf_path, paper_id, model_version=model_version)
             meta["mineru_batch_id"] = batch_id
-            zip_url = _poll_batch_done(client, batch_id, pdf_path.name)
+            _emit_parse_progress(
+                report_progress,
+                done=0,
+                total=1,
+                message="MinerU 云端已提交，等待解析…",
+            )
+            zip_url = _poll_batch_done(
+                client,
+                batch_id,
+                pdf_path.name,
+                report_progress=report_progress,
+            )
             meta["mineru_zip_url"] = zip_url
+            save_mineru_download_pending(
+                out_dir,
+                batch_id=batch_id,
+                zip_url=zip_url,
+                file_name=pdf_path.name,
+                paper_id=paper_id,
+            )
             plog_info("parse", "MinerU 云端下载结果 zip")
+            _emit_parse_progress(
+                report_progress,
+                done=1,
+                total=1,
+                message="MinerU 云端下载结果 zip",
+            )
             zip_bytes = _download_mineru_zip_bytes(client, zip_url)
             md = _markdown_from_zip(zip_bytes, out_dir)
+            clear_mineru_download_pending(out_dir)
     except MinerUCloudError:
         raise
     except httpx.HTTPStatusError as e:

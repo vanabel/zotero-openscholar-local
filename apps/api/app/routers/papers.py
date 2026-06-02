@@ -15,6 +15,7 @@ class BatchIndexBody(BaseModel):
     force: bool = False
     reindex_only: bool = False
     parse_only: bool = False
+    mineru_download_only: bool = False
 
 
 class MissingBatchQuery(BaseModel):
@@ -44,6 +45,14 @@ def sync_zotero_metadata(
     return sync_zotero_metadata_to_papers(include_deleted=include_deleted)
 
 
+@router.get("/batch-work-summary")
+def batch_work_summary():
+    """各批量操作的待处理数量（文献库工具栏）；与 *-missing 入队筛选一致。"""
+    from app.services.paper_batch import get_batch_work_summary
+
+    return get_batch_work_summary()
+
+
 @router.get("/quality-summary")
 def papers_quality_summary():
     """解析质量分布（低质量阈值默认 0.65）。"""
@@ -71,20 +80,32 @@ def list_papers(
         pattern="^(updated|quality_asc|quality_desc)$",
         description="排序：updated | quality_asc | quality_desc",
     ),
+    work_queue: str | None = Query(
+        None,
+        description="按批量待办类型筛选；lance_scholar=SQLite 已有 scholar 向量但 Lance 尚无该 paper_id（待同步）",
+    ),
+    reconcile: bool = Query(
+        False,
+        description="为 true 时对返回列表逐条校准 parse/index 与磁盘/chunks 一致性（较慢，默认关闭）",
+    ),
 ):
-    from app.services.zotero_scanner import count_papers, list_papers as lp
+    from app.services.zotero_scanner import WORK_QUEUE_VALUES, count_papers, list_papers as lp
 
-    kw = {
+    if work_queue is not None and work_queue not in WORK_QUEUE_VALUES:
+        raise HTTPException(status_code=400, detail=f"无效 work_queue: {work_queue}")
+
+    filter_kw = {
         "parse_quality_lte": parse_quality_lte,
         "parse_quality_gte": parse_quality_gte,
         "parse_quality_missing": parse_quality_missing,
+        "work_queue": work_queue,
     }
-    items = lp(limit=limit, offset=offset, q=q, sort=sort, **kw)
+    items = lp(limit=limit, offset=offset, q=q, sort=sort, reconcile=reconcile, **filter_kw)
     return {
         "items": items,
-        "total": count_papers(q=q, **kw),
+        "total": count_papers(q=q, **filter_kw),
         "q": (q or "").strip() or None,
-        "filters": {**kw, "sort": sort},
+        "filters": {**filter_kw, "sort": sort, "reconcile": reconcile},
     }
 
 
@@ -103,6 +124,7 @@ async def index_batch(
                 force=body.force,
                 reindex_only=body.reindex_only,
                 parse_only=body.parse_only,
+                mineru_download_only=body.mineru_download_only,
             )
             results.append({"paper_id": paper_id, **res})
         ok_n = sum(1 for r in results if r.get("ok"))
@@ -120,6 +142,7 @@ async def index_batch(
         force=body.force,
         reindex_only=body.reindex_only,
         parse_only=body.parse_only,
+        mineru_download_only=body.mineru_download_only,
     )
     errors = [t for t in tasks if t.get("error")]
     return JSONResponse(
@@ -145,6 +168,73 @@ async def index_missing(body: MissingBatchQuery = MissingBatchQuery()):
     tasks = enqueue_index_batch(
         ids, force=body.force, reindex_only=body.reindex_only
     )
+    return JSONResponse(status_code=202, content=batch_enqueue_response(tasks, matched=len(ids)))
+
+
+@router.post("/retry-mineru-download")
+async def retry_mineru_download_batch(
+    body: BatchIndexBody,
+    wait: bool = Query(False, description="为 true 时同步等待全部完成（脚本/调试）"),
+):
+    """
+    仅重试 MinerU 云端结果 zip 下载（需 data/parsed/{id}/mineru_pending.json）。
+    不重新上传 PDF；完成后默认继续分块/嵌入（parse_only=true 时仅更新 parsed/）。
+    """
+    if body.force or body.reindex_only:
+        raise HTTPException(status_code=400, detail="mineru_download_only 任务不支持 force / reindex_only")
+    if not body.mineru_download_only:
+        body = body.model_copy(update={"mineru_download_only": True})
+    if wait:
+        from app.services.indexing import index_paper
+
+        results: list[dict] = []
+        for paper_id in body.paper_ids:
+            res = await index_paper(
+                paper_id,
+                parse_only=body.parse_only,
+                mineru_download_only=True,
+            )
+            results.append({"paper_id": paper_id, **res})
+        ok_n = sum(1 for r in results if r.get("ok"))
+        return {
+            "ok": ok_n == len(results),
+            "success": ok_n,
+            "failed": len(results) - ok_n,
+            "results": results,
+        }
+    from app.services.task_queue import enqueue_index_batch
+
+    tasks = enqueue_index_batch(
+        body.paper_ids,
+        parse_only=body.parse_only,
+        mineru_download_only=True,
+    )
+    errors = [t for t in tasks if t.get("error")]
+    return JSONResponse(
+        status_code=202,
+        content={
+            "ok": len(errors) == 0,
+            "queued": len(tasks) - len(errors),
+            "failed": len(errors),
+            "tasks": tasks,
+        },
+    )
+
+
+@router.post("/retry-mineru-download-missing")
+async def retry_mineru_download_missing(
+    body: MissingBatchQuery = MissingBatchQuery(),
+    parse_only: bool = Query(False, description="为 true 时仅下载并写入 parsed/，不分块嵌入"),
+):
+    """为存在 mineru_pending.json 的文献批量入队「仅重试 MinerU zip 下载」。"""
+    from app.services.mineru_download_retry import list_mineru_download_pending_paper_ids
+    from app.services.paper_batch import batch_enqueue_response
+    from app.services.task_queue import enqueue_index_batch
+
+    ids = list_mineru_download_pending_paper_ids(limit=body.limit)
+    if not ids:
+        return JSONResponse(status_code=200, content={"ok": True, "matched": 0, "queued": 0, "failed": 0})
+    tasks = enqueue_index_batch(ids, parse_only=parse_only, mineru_download_only=True)
     return JSONResponse(status_code=202, content=batch_enqueue_response(tasks, matched=len(ids)))
 
 
@@ -185,15 +275,17 @@ def sync_lance_indexed(body: RescoreParseBody = RescoreParseBody()):
     """
     将 SQLite 中已有的 scholar_embedding_json 同步到 LanceDB。
     不重新解析 PDF、不重新分块/嵌入；适合「建立索引」提示复用跳过时补写 Lance。
+    未指定 paper_ids 时仅处理「Lance 中尚无该 paper_id」的待同步文献，避免对已写入 Lance 的篇目重复全量写入。
+    指定 paper_ids 时按给定列表写入（可含已在 Lance 中的文献，用于强制覆盖）。
     """
-    from app.services.lance_store import backfill_lance_batch, list_paper_ids_with_scholar_embeddings
+    from app.services.lance_store import backfill_lance_batch, list_lance_sync_pending_paper_ids
 
     if body.paper_ids:
         ids = list(dict.fromkeys(body.paper_ids))
         if body.limit is not None:
             ids = ids[: body.limit]
     else:
-        ids = list_paper_ids_with_scholar_embeddings(limit=body.limit)
+        ids = list_lance_sync_pending_paper_ids(limit=body.limit)
     if not ids:
         return {"ok": True, "matched": 0, "synced": 0, "rows": 0, "failed": 0}
     return backfill_lance_batch(ids)
@@ -454,16 +546,34 @@ async def parse_one_paper(
     return await index_one(paper_id, force=force, parse_only=True, wait=wait)
 
 
+@router.post("/{paper_id}/retry-mineru-download")
+async def retry_mineru_download_one(
+    paper_id: str,
+    parse_only: bool = Query(False, description="为 true 时仅下载写入 parsed/，不分块嵌入"),
+    wait: bool = Query(False, description="为 true 时同步等待完成（脚本/调试）"),
+):
+    """仅重试 MinerU 云端 zip 下载（需 mineru_pending.json），不重新上传 PDF。"""
+    return await index_one(
+        paper_id,
+        parse_only=parse_only,
+        mineru_download_only=True,
+        wait=wait,
+    )
+
+
 @router.post("/{paper_id}/index")
 async def index_one(
     paper_id: str,
     force: bool = Query(False),
     reindex_only: bool = Query(False, description="仅重建分块/FTS/嵌入，复用 data/parsed 下 Markdown，不跑 MinerU"),
     parse_only: bool = Query(False, description="仅解析 PDF，写入 parsed/，不分块/嵌入"),
+    mineru_download_only: bool = Query(False, description="仅重试 MinerU zip 下载，不重新上传 PDF"),
     wait: bool = Query(False, description="为 true 时同步等待完成（脚本/调试）"),
 ):
     if parse_only and reindex_only:
         raise HTTPException(status_code=400, detail="parse_only 与 reindex_only 不能同时使用")
+    if mineru_download_only and (force or reindex_only):
+        raise HTTPException(status_code=400, detail="mineru_download_only 与 force / reindex_only 不能同时使用")
     if wait:
         from app.services.indexing import index_paper
 
@@ -472,6 +582,7 @@ async def index_one(
             force=force,
             reindex_only=reindex_only,
             parse_only=parse_only,
+            mineru_download_only=mineru_download_only,
         )
         if not res.get("ok"):
             raise HTTPException(
@@ -487,6 +598,7 @@ async def index_one(
         force=force,
         reindex_only=reindex_only,
         parse_only=parse_only,
+        mineru_download_only=mineru_download_only,
     )
     if info.get("error"):
         raise HTTPException(status_code=400, detail=info["error"])

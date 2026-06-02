@@ -17,6 +17,8 @@ def task_kind(*, task_type: str, payload_json: str | None = None, payload: dict 
         except json.JSONDecodeError:
             pl = None
     if pl:
+        if pl.get("mineru_download_only"):
+            return "mineru_download"
         if pl.get("parse_only"):
             return "parse"
         if pl.get("reindex_only"):
@@ -29,5 +31,6 @@ def task_kind_label(kind: str) -> str:
         "parse": "仅解析",
         "reindex": "仅重建索引",
         "index": "建立索引",
+        "mineru_download": "重试 MinerU 下载",
         "summarize": "摘要",
     }.get(kind, kind)

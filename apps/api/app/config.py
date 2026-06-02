@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     openscholar_chat_max_new_tokens: int = Field(
         default=4096, ge=256, le=16384, validation_alias="OPENSCHOLAR_CHAT_MAX_NEW_TOKENS"
     )
+    openscholar_summary_max_new_tokens: int = Field(
+        default=1024, ge=128, le=4096, validation_alias="OPENSCHOLAR_SUMMARY_MAX_NEW_TOKENS"
+    )
     translation_ollama_model: str = Field(default="", validation_alias="TRANSLATION_OLLAMA_MODEL")
     translation_ollama_url: str | None = Field(default=None, validation_alias="TRANSLATION_OLLAMA_URL")
     translation_temperature: float = Field(default=0.1, ge=0.0, le=1.0, validation_alias="TRANSLATION_TEMPERATURE")
@@ -167,6 +170,7 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     pipeline_log: int = Field(default=0, ge=0, le=2, validation_alias="PIPELINE_LOG")
     log_stages: str = Field(default="", validation_alias="LOG_STAGES")
+    log_context: bool = Field(default=True, validation_alias="LOG_CONTEXT")
 
     @field_validator("task_worker_mode", mode="before")
     @classmethod
@@ -238,6 +242,9 @@ class Settings(BaseSettings):
         object.__setattr__(self, "data_dir", dd)
         if self.retrieve_top_k_final > self.retrieve_top_k_fts:
             object.__setattr__(self, "retrieve_top_k_final", self.retrieve_top_k_fts)
+        # Transformers 8B 在单进程内共享一把推理锁；并发>1 只会堆「chat 开始」、无法真正并行 GPU
+        if self.resolved_chat_provider() == "transformers" and self.task_worker_concurrency > 1:
+            object.__setattr__(self, "task_worker_concurrency", 1)
         return self
 
     @property

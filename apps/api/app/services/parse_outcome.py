@@ -16,9 +16,12 @@ def summarize_parse_outcome(md: str, meta: dict | None) -> tuple[str | None, str
 
     if len(text) < 80 or "提取失败" in text[:500]:
         detail = _mineru_detail(meta)
-        msg = "PDF 解析未得到可用正文（可能为扫描件或 MinerU 失败）。"
-        if detail:
-            msg += f" 详情：{detail}"
+        if str(meta.get("mode") or "") == "pdf_invalid":
+            msg = str(meta.get("pdf_error") or detail or "PDF 无效或已损坏，无法解析。")
+        else:
+            msg = "PDF 解析未得到可用正文（可能为扫描件或 MinerU 失败）。"
+            if detail:
+                msg += f" 详情：{detail}"
         return "failed", msg[:2000]
 
     warnings: list[str] = []

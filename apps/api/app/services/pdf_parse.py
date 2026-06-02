@@ -6,12 +6,19 @@ import os
 import shlex
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pypdf import PdfReader
 
 from app.config import settings
 from app.pipeline_logging import clip, plog_info
+
+if TYPE_CHECKING:
+    from app.services.mineru_cloud import ReportParseProgress
+else:
+    ReportParseProgress = Callable[[int, int, str], None]
 
 _MINERU_CLI_WRAPPER = Path(__file__).resolve().parents[2] / "scripts" / "mineru_cli_wrapper.py"
 
@@ -71,6 +78,46 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def inspect_pdf(pdf_path: Path) -> tuple[str | None, int | None]:
+    """
+    解析前检查 PDF 是否可读。
+    返回 (error_message, page_count)；error_message 为 None 表示通过。
+    """
+    if not pdf_path.is_file():
+        return f"文件不存在或不是常规文件：{pdf_path}", None
+    try:
+        head = pdf_path.read_bytes()[:32]
+    except OSError as ex:
+        return f"无法读取文件：{ex}", None
+    stripped = head.lstrip()
+    lower = stripped.lower()
+    if lower.startswith(b"<!doc") or lower.startswith(b"<html") or lower.startswith(b"<?xml"):
+        return (
+            "文件不是 PDF（疑似 HTML/网页）。"
+            "常见于 Zotero 链接附件未下载成功，请在 Zotero 中重新获取 PDF 或替换为本地文件。",
+            None,
+        )
+    if not stripped.startswith(b"%PDF"):
+        sample = stripped[:8]
+        try:
+            hint = sample.decode("ascii", errors="replace")
+        except Exception:
+            hint = repr(sample)
+        return f"文件不是有效 PDF（文件头 {hint!r}）", None
+    try:
+        reader = PdfReader(str(pdf_path), strict=False)
+        n = len(reader.pages)
+    except Exception as ex:
+        return f"PDF 结构损坏，无法读取：{ex}", None
+    if n <= 0:
+        return "PDF 无页面", 0
+    return None, n
+
+
+def _parse_failure_markdown(pdf_path: Path, reason: str) -> str:
+    return f"# 提取失败\n\n{reason}\n\n文件: `{pdf_path}`"
+
+
 def clear_parsed_output_dir(out_dir: Path) -> int:
     """
     删除解析目录下已有产物，便于 MinerU 在无缓存干扰下重新生成。
@@ -92,7 +139,13 @@ def clear_parsed_output_dir(out_dir: Path) -> int:
 
 
 def _pypdf_to_markdown(pdf_path: Path) -> str:
-    reader = PdfReader(str(pdf_path))
+    err, _ = inspect_pdf(pdf_path)
+    if err:
+        return _parse_failure_markdown(pdf_path, err)
+    try:
+        reader = PdfReader(str(pdf_path), strict=False)
+    except Exception as ex:
+        return _parse_failure_markdown(pdf_path, f"无法打开 PDF：{ex}")
     parts: list[str] = []
     for i, page in enumerate(reader.pages, start=1):
         try:
@@ -103,7 +156,10 @@ def _pypdf_to_markdown(pdf_path: Path) -> str:
         if t:
             parts.append(f"## Page {i}\n\n{t}")
     if not parts:
-        return f"# 提取失败\n\n无法从 PDF 读取文本（可能为扫描件）。请安装 MinerU 并配置 CLI。\n\n文件: `{pdf_path}`"
+        return _parse_failure_markdown(
+            pdf_path,
+            "无法从 PDF 读取文本（可能为扫描件）。请安装 MinerU 并配置 CLI。",
+        )
     return "\n\n".join(parts)
 
 
@@ -114,6 +170,7 @@ def parse_one(
     *,
     force_reparse: bool = False,
     pdf_sha256: str | None = None,
+    report_progress: ReportParseProgress | None = None,
 ) -> tuple[str, dict]:
     """
     返回 (markdown, meta)。
@@ -131,6 +188,14 @@ def parse_one(
     out_dir.mkdir(parents=True, exist_ok=True)
     meta: dict = {"mode": "unknown", "mineru": False, "force_reparse": force_reparse}
 
+    pdf_err, page_count = inspect_pdf(pdf_path)
+    if pdf_err:
+        meta.update({"mode": "pdf_invalid", "pdf_error": pdf_err, "page_count": page_count})
+        plog_info("parse", "PDF 预检失败，跳过 MinerU paper_id=%s: %s", paper_id, pdf_err)
+        md = _parse_failure_markdown(pdf_path, pdf_err)
+        (out_dir / "document.md").write_text(md, encoding="utf-8")
+        return md, meta
+
     mineru_mode = (settings.mineru_mode or "cli").strip().lower()
     if mineru_mode == "cloud":
         from app.services.mineru_cloud import MinerUCloudError, parse_pdf_via_cloud_with_splitting
@@ -143,6 +208,7 @@ def parse_one(
                 out_dir,
                 force_reparse=force_reparse,
                 pdf_sha256=pdf_sha256,
+                report_progress=report_progress,
             )
             meta.update(cloud_meta)
             plog_info("parse", "parse_one 完成 mode=mineru_cloud md_chars=%s", len(md))
@@ -153,6 +219,7 @@ def parse_one(
             md = _pypdf_to_markdown(pdf_path)
             (out_dir / "document.md").write_text(md, encoding="utf-8")
             meta["mode"] = "pypdf_fallback_after_mineru_cloud_error"
+            plog_info("parse", "parse_one 完成 mode=pypdf_fallback md_chars=%s", len(md))
             return md, meta
 
     mineru_bin = _mineru_executable()
