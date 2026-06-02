@@ -18,3 +18,5 @@ apps/api/config/mineru.hpc.json
 scripts/hpc/sync_to_hpc.local.env
 # MinerU 云解析断点目录
 **/parsed/**/_mineru_cloud_chunks/
+# 本地运行/上传临时产物
+output/
